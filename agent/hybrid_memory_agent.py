@@ -88,16 +88,30 @@ def fts5_search(query: str, limit: int = 10) -> list:
     _ensure_fts5()
     try:
         conn = sqlite3.connect(FTS5_DB); conn.row_factory = sqlite3.Row
-        cur = conn.execute("SELECT content, fact_id, rank as bm25_score FROM facts_fts WHERE facts_fts MATCH ? ORDER BY rank LIMIT ?",
+        cur = conn.execute("""SELECT fts.content, fts.fact_id, fts.rank as bm25_score,
+                              f.created_at
+                              FROM facts_fts fts
+                              JOIN facts f ON fts.fact_id = f.id
+                              WHERE facts_fts MATCH ? ORDER BY fts.rank LIMIT ?""",
                            (query, limit))
         rows = cur.fetchall()
         if not rows and ' ' in query:
-            cur = conn.execute("SELECT content, fact_id, rank as bm25_score FROM facts_fts WHERE facts_fts MATCH ? ORDER BY rank LIMIT ?",
+            cur = conn.execute("""SELECT fts.content, fts.fact_id, fts.rank as bm25_score,
+                                  f.created_at
+                                  FROM facts_fts fts
+                                  JOIN facts f ON fts.fact_id = f.id
+                                  WHERE facts_fts MATCH ? ORDER BY fts.rank LIMIT ?""",
                                (' OR '.join(query.split()), limit))
             rows = cur.fetchall()
-        results = [{"content": r["content"], "fact_id": r["fact_id"],
-                    "bm25": round(min(1.0, max(0.0, abs(r["bm25_score"] or 0) / 5.0)), 4),
-                    "backend": "fts5"} for r in rows]
+        results = []
+        for r in rows:
+            bm25 = round(min(1.0, max(0.0, abs(r["bm25_score"] or 0) / 5.0)), 4)
+            created = r["created_at"] or ""
+            if created:
+                bm25 *= (0.7 + 0.3 * recency_boost(created))
+            results.append({"content": r["content"], "fact_id": r["fact_id"],
+                           "bm25": bm25, "created_at": created,
+                           "backend": "fts5"})
         conn.close(); return results
     except Exception as e:
         print(f"[FTS5] Search error: {e}", file=sys.stderr); return []
@@ -150,7 +164,13 @@ def chroma_search(query: str, limit: int = 10) -> list:
                 results = coll.query(query_embeddings=emb, n_results=limit)
                 for i, doc in enumerate(results.get("documents", [[]])[0]):
                     dist = results.get("distances", [[]])[0][i]
-                    hits.append({"content": doc, "score": round(1.0 - dist, 4), "backend": "chroma"})
+                    score = round(1.0 - dist, 4)
+                    meta = results.get("metadatas", [[]])[0][i] if results.get("metadatas") else {}
+                    created = meta.get("created_at", "") if isinstance(meta, dict) else ""
+                    if created:
+                        score *= (0.7 + 0.3 * recency_boost(created))
+                    hits.append({"content": doc, "score": score,
+                                 "created_at": created, "backend": "chroma"})
             except Exception: pass
         return sorted(hits, key=lambda h: h["score"], reverse=True)[:limit]
     except Exception as e:
@@ -162,7 +182,9 @@ def chroma_store(content: str) -> bool:
     try:
         client = _get_chroma()
         coll = client.get_or_create_collection(name=CHROMA_COLLECTION, metadata={"hnsw:space": "cosine"})
-        coll.add(ids=[str(uuid.uuid4())], documents=[content], embeddings=emb)
+        now = datetime.datetime.utcnow().isoformat() + "Z"
+        coll.add(ids=[str(uuid.uuid4())], documents=[content], embeddings=emb,
+                 metadatas=[{"created_at": now, "source": "extraction"}])
         return True
     except Exception as e:
         print(f"[Chroma] Store error: {e}", file=sys.stderr); return False
