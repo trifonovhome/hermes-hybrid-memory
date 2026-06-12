@@ -20,8 +20,8 @@ RUN python -m spacy download ru_core_news_sm && \
 
 RUN pip install --no-cache-dir hermes-agent
 
-COPY hybrid_memory_agent.py /opt/memory/hybrid_memory_agent.py
-COPY entrypoint-unified.sh /opt/entrypoint.sh
+COPY agent/hybrid_memory_agent.py /opt/memory/hybrid_memory_agent.py
+COPY docker/entrypoint.sh /opt/entrypoint.sh
 RUN chmod +x /opt/entrypoint.sh
 
 RUN mkdir -p /home/hermes/.hermes /data/memory && \

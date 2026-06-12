@@ -1,14 +1,14 @@
 #!/bin/bash
 set -e
 
-AGENT_ID=${AGENT_ID:-agent-alpha}
+AGENT_ID=${AGENT_ID:-andrei}
 MEMORY_PORT=${MEMORY_PORT:-8711}
 AGENT_PORT=${AGENT_PORT:-8642}
 LITELLM_URL=${LITELLM_URL:-http://127.0.0.1:4000}
 
 # Load LiteLLM key if mounted
 if [ -f /opt/litellm.env ]; then
-    export LITELLM_API_KEY=*** -oP 'LITELLM_MASTER_KEY=\K.*' /opt/litellm.env | head -1)
+    export LITELLM_API_KEY=$(grep -oP 'LITELLM_MASTER_KEY=\K.*' /opt/litellm.env | head -1)
     echo "[entry] LiteLLM key loaded" >&2
 fi
 
@@ -21,7 +21,7 @@ LISTEN_HOST=127.0.0.1 LISTEN_PORT=$MEMORY_PORT \
     MEMORYGRAPH_DIR=/data/memory/memorygraph \
     AGENT_ID=$AGENT_ID \
     LITELLM_URL=$LITELLM_URL \
-    LITELLM_API_KEY=*** \
+    LITELLM_API_KEY=$LITELLM_API_KEY \
     SHARED_URL=${SHARED_URL:-http://127.0.0.1:8710} \
     PEERS="${PEERS:-}" \
     python3 /opt/memory/hybrid_memory_agent.py &
