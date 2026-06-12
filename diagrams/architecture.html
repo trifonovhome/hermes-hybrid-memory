@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Hermes Hybrid Memory Architecture</title>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    * { margin:0; padding:0; box-sizing:border-box }
+    body { font-family:'JetBrains Mono',monospace; background:#f8fafc; padding:2rem; color:#1e293b }
+    .container { max-width:1400px; margin:0 auto }
+    .header { margin-bottom:2rem }
+    .header-row { display:flex; align-items:center; gap:1rem; margin-bottom:.5rem }
+    .pulse-dot { width:12px; height:12px; background:#0891b2; border-radius:50%; animation:pulse 2s infinite }
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
+    h1 { font-size:1.5rem; font-weight:700; color:#0f172a }
+    .subtitle { color:#64748b; font-size:.875rem; margin-left:1.75rem }
+    .diagram-container { background:#fff; border-radius:1rem; border:1px solid #e2e8f0; padding:1.5rem; overflow-x:auto; box-shadow:0 1px 3px rgba(0,0,0,.06) }
+    svg { width:100%; min-width:1100px; display:block }
+    .cards { display:grid; grid-template-columns:repeat(auto-fit,minmax(280px,1fr)); gap:1rem; margin-top:2rem }
+    .card { background:#fff; border-radius:.75rem; border:1px solid #e2e8f0; padding:1.25rem; box-shadow:0 1px 2px rgba(0,0,0,.04) }
+    .card-header { display:flex; align-items:center; gap:.5rem; margin-bottom:.75rem }
+    .card-dot { width:8px; height:8px; border-radius:50% }
+    .card-dot.cyan { background:#0891b2 } .card-dot.emerald { background:#059669 }
+    .card-dot.violet { background:#7c3aed } .card-dot.amber { background:#d97706 } .card-dot.rose { background:#e11d48 }
+    .card h3 { font-size:.875rem; font-weight:600; color:#0f172a }
+    .card ul { list-style:none; color:#475569; font-size:.75rem }
+    .card li { margin-bottom:.375rem }
+    .footer { text-align:center; margin-top:1.5rem; color:#94a3b8; font-size:.75rem }
+  </style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <div class="header-row">
+      <div class="pulse-dot"></div>
+      <h1>Hermes Hybrid Memory Architecture</h1>
+    </div>
+    <p class="subtitle">Per-agent 4-backend memory stack — Docker, host networking, home-server</p>
+  </div>
+
+  <div class="diagram-container">
+    <svg viewBox="0 0 1200 850">
+      <defs>
+        <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto"><polygon points="0 0, 10 3.5, 0 7" fill="#64748b"/></marker>
+        <marker id="arrow-cy" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto"><polygon points="0 0, 10 3.5, 0 7" fill="#0891b2"/></marker>
+        <marker id="arrow-em" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto"><polygon points="0 0, 10 3.5, 0 7" fill="#059669"/></marker>
+        <marker id="arrow-vi" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto"><polygon points="0 0, 10 3.5, 0 7" fill="#7c3aed"/></marker>
+        <marker id="arrow-am" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto"><polygon points="0 0, 10 3.5, 0 7" fill="#d97706"/></marker>
+        <marker id="arrow-ro" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto"><polygon points="0 0, 10 3.5, 0 7" fill="#e11d48"/></marker>
+        <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse"><path d="M 40 0 L 0 0 0 40" fill="none" stroke="#e2e8f0" stroke-width=".5"/></pattern>
+      </defs>
+
+      <rect x="0" y="0" width="100%" height="100%" fill="#ffffff"/>
+      <rect width="100%" height="100%" fill="url(#grid)"/>
+
+      <!-- ====== HOST BOUNDARY ====== -->
+      <rect x="20" y="15" width="1160" height="815" rx="12" fill="rgba(217,119,6,.02)" stroke="#d97706" stroke-width="1" stroke-dasharray="8,4"/>
+      <text x="32" y="34" fill="#d97706" font-size="10" font-weight="600">Host: home-server (Linux 6.17, 64G RAM) • UID 1000 • Docker network_mode:host</text>
+
+      <!-- ====== CLIENTS (top) ====== -->
+      <rect x="60" y="60" width="140" height="55" rx="6" fill="rgba(8,145,178,.08)" stroke="#0891b2" stroke-width="1.5"/>
+      <text x="130" y="82" fill="#0f172a" font-size="11" font-weight="600" text-anchor="middle">TUI / CLI</text>
+      <text x="130" y="98" fill="#64748b" font-size="9" text-anchor="middle">Hermes client</text>
+      <text x="130" y="110" fill="#0891b2" font-size="8" text-anchor="middle">:8642</text>
+
+      <rect x="250" y="60" width="140" height="55" rx="6" fill="rgba(8,145,178,.08)" stroke="#0891b2" stroke-width="1.5"/>
+      <text x="320" y="82" fill="#0f172a" font-size="11" font-weight="600" text-anchor="middle">Open WebUI</text>
+      <text x="320" y="98" fill="#64748b" font-size="9" text-anchor="middle">ai.trifonov.su</text>
+      <text x="320" y="110" fill="#0891b2" font-size="8" text-anchor="middle">:3080</text>
+
+      <rect x="440" y="60" width="140" height="55" rx="6" fill="rgba(8,145,178,.08)" stroke="#0891b2" stroke-width="1.5"/>
+      <text x="510" y="82" fill="#0f172a" font-size="11" font-weight="600" text-anchor="middle">Matrix</text>
+      <text x="510" y="98" fill="#64748b" font-size="9" text-anchor="middle">im.trifonov.su</text>
+      <text x="510" y="110" fill="#0891b2" font-size="8" text-anchor="middle">Synapse</text>
+
+      <!-- arrows: clients → gateway -->
+      <line x1="130" y1="115" x2="130" y2="148" stroke="#0891b2" stroke-width="1.5" marker-end="url(#arrow-cy)"/>
+      <line x1="320" y1="115" x2="320" y2="148" stroke="#0891b2" stroke-width="1.5" marker-end="url(#arrow-cy)"/>
+      <line x1="510" y1="115" x2="510" y2="148" stroke="#0891b2" stroke-width="1.5" marker-end="url(#arrow-cy)"/>
+
+      <!-- ====== AGENT CONTAINERS (middle) ====== -->
+      <!-- Andrei container -->
+      <rect x="40" y="150" width="320" height="140" rx="8" fill="transparent" stroke="#e11d48" stroke-width="1" stroke-dasharray="4,4"/>
+      <text x="50" y="164" fill="#e11d48" font-size="8">Container: agent-alpha</text>
+
+      <rect x="60" y="175" width="130" height="50" rx="6" fill="rgba(5,150,105,.08)" stroke="#059669" stroke-width="1.5"/>
+      <text x="125" y="196" fill="#0f172a" font-size="10" font-weight="600" text-anchor="middle">Hermes Gateway</text>
+      <text x="125" y="212" fill="#64748b" font-size="9" text-anchor="middle">:8642</text>
+
+      <rect x="210" y="175" width="130" height="50" rx="6" fill="rgba(5,150,105,.08)" stroke="#059669" stroke-width="1.5"/>
+      <text x="275" y="196" fill="#0f172a" font-size="10" font-weight="600" text-anchor="middle">Memory API</text>
+      <text x="275" y="212" fill="#64748b" font-size="9" text-anchor="middle">:8711</text>
+
+      <text x="125" y="260" fill="#059669" font-size="8" text-anchor="middle">FTS5: 51 | Chroma: 84 | MG: 51 ✅</text>
+      <text x="125" y="275" fill="#475569" font-size="8" text-anchor="middle">AGENT_ID=agent-alpha</text>
+
+      <!-- Sonya container -->
+      <rect x="380" y="150" width="320" height="140" rx="8" fill="transparent" stroke="#e11d48" stroke-width="1" stroke-dasharray="4,4"/>
+      <text x="390" y="164" fill="#e11d48" font-size="8">Container: agent-beta</text>
+
+      <rect x="400" y="175" width="130" height="50" rx="6" fill="rgba(5,150,105,.08)" stroke="#059669" stroke-width="1.5"/>
+      <text x="465" y="196" fill="#0f172a" font-size="10" font-weight="600" text-anchor="middle">Hermes Gateway</text>
+      <text x="465" y="212" fill="#64748b" font-size="9" text-anchor="middle">:8643</text>
+
+      <rect x="550" y="175" width="130" height="50" rx="6" fill="rgba(5,150,105,.08)" stroke="#059669" stroke-width="1.5"/>
+      <text x="615" y="196" fill="#0f172a" font-size="10" font-weight="600" text-anchor="middle">Memory API</text>
+      <text x="615" y="212" fill="#64748b" font-size="9" text-anchor="middle">:8712</text>
+
+      <text x="465" y="260" fill="#059669" font-size="8" text-anchor="middle">FTS5: 2 | Chroma: 2 | MG: 1 ✅</text>
+      <text x="465" y="275" fill="#475569" font-size="8" text-anchor="middle">AGENT_ID=agent-beta</text>
+
+      <!-- Yola container (shared master) -->
+      <rect x="720" y="150" width="280" height="140" rx="8" fill="transparent" stroke="#d97706" stroke-width="1" stroke-dasharray="4,4"/>
+      <text x="730" y="164" fill="#d97706" font-size="8">Container: agent-gamma (shared master)</text>
+
+      <rect x="740" y="175" width="120" height="50" rx="6" fill="rgba(217,119,6,.08)" stroke="#d97706" stroke-width="1.5"/>
+      <text x="800" y="196" fill="#0f172a" font-size="10" font-weight="600" text-anchor="middle">Hermes Gateway</text>
+      <text x="800" y="212" fill="#64748b" font-size="9" text-anchor="middle">:8647</text>
+
+      <rect x="875" y="175" width="110" height="50" rx="6" fill="rgba(217,119,6,.08)" stroke="#d97706" stroke-width="1.5"/>
+      <text x="930" y="196" fill="#0f172a" font-size="10" font-weight="600" text-anchor="middle">Memory API</text>
+      <text x="930" y="212" fill="#64748b" font-size="9" text-anchor="middle">:8710 ⭐</text>
+
+      <text x="860" y="260" fill="#d97706" font-size="8" text-anchor="middle">SHARED_URL=http://127.0.0.1:8710 ✅</text>
+      <text x="860" y="275" fill="#d97706" font-size="8" text-anchor="middle">FTS5: 1 | Chroma: 1 | MG: 1</text>
+
+      <!-- ====== BACKENDS (bottom) ====== -->
+      <rect x="20" y="315" width="1160" height="220" rx="10" fill="rgba(124,58,237,.03)" stroke="#7c3aed" stroke-width="1" stroke-dasharray="6,3"/>
+      <text x="32" y="333" fill="#7c3aed" font-size="10" font-weight="600">Memory Backends (4-layer hybrid search)</text>
+
+      <!-- FTS5 -->
+      <rect x="60" y="350" width="230" height="105" rx="6" fill="rgba(124,58,237,.08)" stroke="#7c3aed" stroke-width="1.5"/>
+      <text x="175" y="374" fill="#0f172a" font-size="12" font-weight="600" text-anchor="middle">1. FTS5</text>
+      <text x="175" y="394" fill="#475569" font-size="9" text-anchor="middle">SQLite full-text search</text>
+      <text x="175" y="410" fill="#475569" font-size="9" text-anchor="middle">BM25 ranking, &lt;1ms</text>
+      <text x="175" y="426" fill="#475569" font-size="9" text-anchor="middle">fallback: OR-поиск</text>
+      <text x="175" y="444" fill="#7c3aed" font-size="8" text-anchor="middle">facts + sessions tables</text>
+
+      <!-- Chroma -->
+      <rect x="310" y="350" width="230" height="105" rx="6" fill="rgba(124,58,237,.08)" stroke="#7c3aed" stroke-width="1.5"/>
+      <text x="425" y="374" fill="#0f172a" font-size="12" font-weight="600" text-anchor="middle">2. Chroma + bge-m3</text>
+      <text x="425" y="394" fill="#475569" font-size="9" text-anchor="middle">Vector DB, cosine similarity</text>
+      <text x="425" y="410" fill="#475569" font-size="9" text-anchor="middle">bge-m3 (1024d) via LiteLLM</text>
+      <text x="425" y="426" fill="#475569" font-size="9" text-anchor="middle">50–200ms, 2 collections</text>
+      <text x="425" y="444" fill="#7c3aed" font-size="8" text-anchor="middle">memory_ID + sessions_ID</text>
+
+      <!-- Shared Pool -->
+      <rect x="560" y="350" width="230" height="105" rx="6" fill="rgba(217,119,6,.08)" stroke="#d97706" stroke-width="1.5"/>
+      <text x="675" y="374" fill="#0f172a" font-size="12" font-weight="600" text-anchor="middle">3. Shared Pool</text>
+      <text x="675" y="394" fill="#475569" font-size="9" text-anchor="middle">Remote HTTP endpoint</text>
+      <text x="675" y="410" fill="#475569" font-size="9" text-anchor="middle">agent-gamma :8710</text>
+      <text x="675" y="426" fill="#475569" font-size="9" text-anchor="middle">SHARED_URL /memory/search</text>
+      <text x="675" y="444" fill="#059669" font-size="8" text-anchor="middle">agent-gamma :8710 ✅</text>
+
+      <!-- MemoryGraph -->
+      <rect x="810" y="350" width="230" height="105" rx="6" fill="rgba(124,58,237,.08)" stroke="#7c3aed" stroke-width="1.5"/>
+      <text x="925" y="374" fill="#0f172a" font-size="12" font-weight="600" text-anchor="middle">4. MemoryGraph</text>
+      <text x="925" y="394" fill="#475569" font-size="9" text-anchor="middle">SQLite graph search</text>
+      <text x="925" y="410" fill="#475569" font-size="9" text-anchor="middle">spaCy ru_core_news_md</text>
+      <text x="925" y="426" fill="#475569" font-size="9" text-anchor="middle">6 memory types, tags</text>
+      <text x="925" y="444" fill="#7c3aed" font-size="8" text-anchor="middle">recency_boost applied</text>
+
+      <!-- Arrows: agents → backends -->
+      <!-- alpha → backends -->
+      <line x1="275" y1="225" x2="275" y2="280" stroke="#7c3aed" stroke-width="1" marker-end="url(#arrow-vi)"/>
+      <line x1="175" y1="280" x2="175" y2="348" stroke="#7c3aed" stroke-width="1" marker-end="url(#arrow-vi)"/>
+      <line x1="425" y1="280" x2="425" y2="348" stroke="#7c3aed" stroke-width="1" marker-end="url(#arrow-vi)"/>
+      <line x1="675" y1="280" x2="675" y2="348" stroke="#d97706" stroke-width="1" marker-end="url(#arrow-am)"/>
+      <line x1="925" y1="280" x2="925" y2="348" stroke="#7c3aed" stroke-width="1" marker-end="url(#arrow-vi)"/>
+
+      <!-- beta → backends -->
+      <line x1="615" y1="225" x2="615" y2="280" stroke="#7c3aed" stroke-width="1" marker-end="url(#arrow-vi)"/>
+
+      <!-- gamma → backends -->
+      <line x1="930" y1="225" x2="930" y2="348" stroke="#d97706" stroke-width="1" marker-end="url(#arrow-am)"/>
+
+      <!-- share/broadcast arrows между агентами -->
+      <path d="M 275 180 Q 350 170 400 180" fill="none" stroke="#e11d48" stroke-width="1" stroke-dasharray="4,3" marker-end="url(#arrow-ro)"/>
+      <text x="335" y="170" fill="#e11d48" font-size="7">share</text>
+      <path d="M 615 180 Q 680 170 740 180" fill="none" stroke="#e11d48" stroke-width="1" stroke-dasharray="4,3" marker-end="url(#arrow-ro)"/>
+      <text x="675" y="170" fill="#e11d48" font-size="7">share</text>
+
+      <!-- shared pool arrow: agents → gamma team -->
+      <text x="350" y="298" fill="#d97706" font-size="8" text-anchor="middle">SHARED_URL → :8710</text>
+      <text x="860" y="298" fill="#d97706" font-size="8" text-anchor="middle">SHARED_URL → :8710</text>
+
+      <!-- ====== FUSION ENGINE (right) ====== -->
+      <rect x="1020" y="315" width="160" height="220" rx="8" fill="transparent" stroke="#059669" stroke-width="1.5" stroke-dasharray="5,3"/>
+      <text x="1030" y="335" fill="#059669" font-size="9" font-weight="600">Fusion Engine</text>
+      <text x="1045" y="360" fill="#475569" font-size="8">Weights:</text>
+      <text x="1045" y="378" fill="#475569" font-size="8">  shared:  0.45×</text>
+      <text x="1045" y="396" fill="#475569" font-size="8">  chroma:  0.50×</text>
+      <text x="1045" y="414" fill="#475569" font-size="8">  fts5:    0.20×</text>
+      <text x="1045" y="432" fill="#475569" font-size="8">  mgraph:  0.15+</text>
+      <text x="1045" y="455" fill="#475569" font-size="8">Strategy:</text>
+      <text x="1045" y="473" fill="#475569" font-size="8">  new OR boost</text>
+      <text x="1045" y="491" fill="#475569" font-size="8">  dedup by key</text>
+      <text x="1045" y="509" fill="#475569" font-size="8">  recency_boost</text>
+      <text x="1045" y="527" fill="#475569" font-size="8">  sort desc ↓</text>
+
+      <!-- ====== LLM CHAIN (right side) ====== -->
+      <rect x="1020" y="15" width="160" height="285" rx="8" fill="transparent" stroke="#d97706" stroke-width="1" stroke-dasharray="5,3"/>
+      <text x="1030" y="35" fill="#d97706" font-size="9" font-weight="600">LLM Chain</text>
+
+      <rect x="1035" y="50" width="130" height="42" rx="6" fill="rgba(217,119,6,.08)" stroke="#d97706" stroke-width="1.5"/>
+      <text x="1100" y="68" fill="#0f172a" font-size="9" font-weight="600" text-anchor="middle">Headroom</text>
+      <text x="1100" y="82" fill="#64748b" font-size="8" text-anchor="middle">:8787 proxy</text>
+
+      <line x1="1100" y1="92" x2="1100" y2="108" stroke="#d97706" stroke-width="1.5" marker-end="url(#arrow-am)"/>
+
+      <rect x="1035" y="110" width="130" height="42" rx="6" fill="rgba(217,119,6,.08)" stroke="#d97706" stroke-width="1.5"/>
+      <text x="1100" y="128" fill="#0f172a" font-size="9" font-weight="600" text-anchor="middle">LiteLLM</text>
+      <text x="1100" y="142" fill="#64748b" font-size="8" text-anchor="middle">:4000 gateway</text>
+
+      <line x1="1100" y1="152" x2="1100" y2="168" stroke="#d97706" stroke-width="1.5" marker-end="url(#arrow-am)"/>
+
+      <rect x="1035" y="170" width="130" height="42" rx="6" fill="rgba(217,119,6,.08)" stroke="#d97706" stroke-width="1.5"/>
+      <text x="1100" y="188" fill="#0f172a" font-size="9" font-weight="600" text-anchor="middle">DeepSeek API</text>
+      <text x="1100" y="202" fill="#64748b" font-size="8" text-anchor="middle">deepseek-v4-pro</text>
+
+      <text x="1075" y="30" fill="#64748b" font-size="7">embeddings bge-m3</text>
+      <text x="1075" y="228" fill="#64748b" font-size="7">+ Ollama fallback</text>
+      <text x="1075" y="245" fill="#64748b" font-size="7">LITELLM_URL=:8787</text>
+      <text x="1075" y="262" fill="#64748b" font-size="7">(через Headroom)</text>
+
+      <!-- arrow: backends → fusion -->
+      <line x1="1040" y1="400" x2="1018" y2="400" stroke="#059669" stroke-width="1" marker-end="url(#arrow-em)"/>
+
+      <!-- ====== HERMES PLUGIN (host-level) ====== -->
+      <rect x="60" y="555" width="300" height="60" rx="6" fill="rgba(8,145,178,.08)" stroke="#0891b2" stroke-width="1.5"/>
+      <text x="210" y="578" fill="#0f172a" font-size="11" font-weight="600" text-anchor="middle">Hermes Plugin: memory.provider=hybrid</text>
+      <text x="210" y="596" fill="#64748b" font-size="9" text-anchor="middle">Tools: hybrid_search, hybrid_status</text>
+      <text x="210" y="610" fill="#0891b2" font-size="8" text-anchor="middle">FTS5 42 + Chroma 214 (standalone) → TUI agent context</text>
+
+      <!-- arrow: host plugin ← memory APIs -->
+      <line x1="210" y1="555" x2="210" y2="535" stroke="#0891b2" stroke-width="1" stroke-dasharray="3,3"/>
+      <line x1="275" y1="535" x2="210" y2="535" stroke="#0891b2" stroke-width="1" stroke-dasharray="3,3"/>
+      <text x="242" y="530" fill="#0891b2" font-size="7">HTTP :8711</text>
+
+      <!-- ====== DATA PATHS (bottom) ====== -->
+      <rect x="60" y="640" width="1120" height="85" rx="6" fill="rgba(124,58,237,.03)" stroke="#7c3aed" stroke-width="1" stroke-dasharray="4,3"/>
+      <text x="72" y="658" fill="#7c3aed" font-size="9" font-weight="600">Volume Mounts (host paths → container /data/memory/)</text>
+
+      <rect x="72" y="670" width="260" height="42" rx="4" fill="rgba(124,58,237,.05)" stroke="#7c3aed" stroke-width=".8"/>
+      <text x="202" y="688" fill="#475569" font-size="8" text-anchor="middle">/hermes-hybrid-memory/data/</text>
+      <text x="202" y="703" fill="#475569" font-size="8" text-anchor="middle">data/{alpha,beta,gamma}/{fts5,chroma,memorygraph}</text>
+
+      <rect x="350" y="670" width="400" height="42" rx="4" fill="rgba(124,58,237,.05)" stroke="#7c3aed" stroke-width=".8"/>
+      <text x="550" y="688" fill="#475569" font-size="8" text-anchor="middle">Profile mounts: ~/.hermes/profiles/{alpha,beta}/</text>
+      <text x="550" y="703" fill="#475569" font-size="8" text-anchor="middle">→ /home/hermes/.hermes/profile (config.yaml + .env)</text>
+
+      <rect x="770" y="670" width="390" height="42" rx="4" fill="rgba(124,58,237,.05)" stroke="#7c3aed" stroke-width=".8"/>
+      <text x="965" y="688" fill="#475569" font-size="8" text-anchor="middle">Litellm env: /opt/litellm.env → /opt/litellm.env:ro</text>
+      <text x="965" y="703" fill="#475569" font-size="8" text-anchor="middle">LITELLM_API_KEY extraction from running container</text>
+
+      <!-- ====== SHARE/PEER LEGEND ====== -->
+      <text x="720" y="750" fill="#0f172a" font-size="9" font-weight="600">PEERS:</text>
+      <text x="720" y="766" fill="#475569" font-size="8">alpha → beta:8712, delta:8713, epsilon:8714, zeta:8715</text>
+      <text x="720" y="780" fill="#475569" font-size="8">beta → alpha:8642, delta:8644, epsilon:8645, zeta:8646</text>
+      <text x="720" y="796" fill="#475569" font-size="8">gamma → agent-alpha:8711, agent-beta:8712</text>
+
+      <!-- ====== LEGEND ====== -->
+      <text x="40" y="750" fill="#0f172a" font-size="9" font-weight="600">Legend:</text>
+
+      <rect x="40" y="758" width="14" height="9" rx="2" fill="rgba(5,150,105,.08)" stroke="#059669" stroke-width="1"/>
+      <text x="58" y="766" fill="#475569" font-size="8">Gateway / API</text>
+
+      <rect x="140" y="758" width="14" height="9" rx="2" fill="rgba(124,58,237,.08)" stroke="#7c3aed" stroke-width="1"/>
+      <text x="158" y="766" fill="#475569" font-size="8">Memory Backend</text>
+
+      <rect x="260" y="758" width="14" height="9" rx="2" fill="rgba(8,145,178,.08)" stroke="#0891b2" stroke-width="1"/>
+      <text x="278" y="766" fill="#475569" font-size="8">Client</text>
+
+      <rect x="330" y="758" width="14" height="9" rx="2" fill="rgba(217,119,6,.08)" stroke="#d97706" stroke-width="1"/>
+      <text x="348" y="766" fill="#475569" font-size="8">Shared / LLM</text>
+
+      <rect x="440" y="758" width="14" height="9" rx="2" fill="rgba(225,29,72,.06)" stroke="#e11d48" stroke-width="1"/>
+      <text x="458" y="766" fill="#475569" font-size="8">Container</text>
+
+      <line x1="505" y1="763" x2="525" y2="763" stroke="#e11d48" stroke-width="1" stroke-dasharray="3,3"/>
+      <text x="530" y="766" fill="#475569" font-size="8">Share/Broadcast</text>
+
+    </svg>
+  </div>
+
+  <div class="cards">
+    <div class="card">
+      <div class="card-header"><div class="card-dot violet"></div><h3>4 Backends</h3></div>
+      <ul>
+        <li>• FTS5 SQLite — BM25 keyword, &lt;1ms</li>
+        <li>• Chroma + bge-m3 — semantic, 50–200ms</li>
+        <li>• Shared Pool — remote :8710, agent-gamma</li>
+        <li>• MemoryGraph + spaCy — graph, tags, recency</li>
+      </ul>
+    </div>
+    <div class="card">
+      <div class="card-header"><div class="card-dot emerald"></div><h3>Fusion: unified_search()</h3></div>
+      <ul>
+        <li>• 4-backend parallel query (limit × 2)</li>
+        <li>• Dedup by normalized key (alnum, 80 chars)</li>
+        <li>• New fact: weighted add. Existing: boost</li>
+        <li>• Weights: shared 0.45, chroma 0.50, fts5 0.20, mg 0.15+</li>
+      </ul>
+    </div>
+    <div class="card">
+      <div class="card-dot amber"></div><div class="card-header"><div class="card-dot amber"></div><h3>LLM Chain</h3></div>
+      <ul>
+        <li>• TUI → Gateway :8642 → Headroom :8787</li>
+        <li>• Headroom → LiteLLM :4000 → DeepSeek</li>
+        <li>• Memory API: LITELLM_URL=:8787</li>
+        <li>• Embeddings: bge-m3 (1024d) via same chain</li>
+      </ul>
+    </div>
+  </div>
+
+  <p class="footer">Hermes Hybrid Memory v1.0 • home-server • 13 June 2026 • github.com/trifonovhome/hermes-memory</p>
+</div>
+</body>
+</html>

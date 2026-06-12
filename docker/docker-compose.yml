@@ -1,0 +1,73 @@
+# Hermes Hybrid Memory — Docker Compose
+# 3 agents: alpha, beta, gamma (shared master)
+
+x-agent-template: &agent-template
+  build:
+    context: ..
+    dockerfile: docker/Dockerfile
+  restart: unless-stopped
+  user: "1000:1000"
+  network_mode: host
+
+services:
+  agent-gamma:
+    <<: *agent-template
+    container_name: agent-gamma
+    environment:
+      - AGENT_ID=agent-gamma
+      - AGENT_PORT=8647
+      - MEMORY_PORT=8710
+      - LISTEN_PORT=8710
+      - FTS5_DB=/data/memory/fts5/trial_db.sqlite
+      - CHROMA_DIR=/data/memory/chroma
+      - MEMORYGRAPH_DIR=/data/memory/memorygraph
+      - LITELLM_URL=$${LITELLM_URL:-http://127.0.0.1:4000}
+      - LITELLM_API_KEY=$${LITELLM_API_KEY:-}
+      - SHARED_URL=http://127.0.0.1:8710
+      - PEERS=agent-alpha:127.0.0.1:8711,agent-beta:127.0.0.1:8712
+    volumes:
+      - ./data/gamma/fts5:/data/memory/fts5:rw
+      - ./data/gamma/chroma:/data/memory/chroma:rw
+      - ./data/gamma/memorygraph:/data/memory/memorygraph:rw
+
+  agent-alpha:
+    <<: *agent-template
+    container_name: agent-alpha
+    environment:
+      - AGENT_ID=agent-alpha
+      - AGENT_PORT=8642
+      - MEMORY_PORT=8711
+      - LISTEN_PORT=8711
+      - FTS5_DB=/data/memory/fts5/trial_db.sqlite
+      - CHROMA_DIR=/data/memory/chroma
+      - MEMORYGRAPH_DIR=/data/memory/memorygraph
+      - LITELLM_URL=$${LITELLM_URL:-http://127.0.0.1:4000}
+      - LITELLM_API_KEY=$${LITELLM_API_KEY:-}
+      - SHARED_URL=http://127.0.0.1:8710
+      - PEERS=agent-beta:127.0.0.1:8712,agent-delta:127.0.0.1:8713,agent-epsilon:127.0.0.1:8714,agent-zeta:127.0.0.1:8715
+    volumes:
+      - ./profiles/alpha:/home/hermes/.hermes/profile:rw
+      - ./data/alpha/fts5:/data/memory/fts5:rw
+      - ./data/alpha/chroma:/data/memory/chroma:rw
+      - ./data/alpha/memorygraph:/data/memory/memorygraph:rw
+
+  agent-beta:
+    <<: *agent-template
+    container_name: agent-beta
+    environment:
+      - AGENT_ID=agent-beta
+      - AGENT_PORT=8643
+      - MEMORY_PORT=8712
+      - LISTEN_PORT=8712
+      - FTS5_DB=/data/memory/fts5/trial_db.sqlite
+      - CHROMA_DIR=/data/memory/chroma
+      - MEMORYGRAPH_DIR=/data/memory/memorygraph
+      - LITELLM_URL=$${LITELLM_URL:-http://127.0.0.1:4000}
+      - LITELLM_API_KEY=$${LITELLM_API_KEY:-}
+      - SHARED_URL=http://127.0.0.1:8710
+      - PEERS=agent-alpha:127.0.0.1:8642,agent-delta:127.0.0.1:8644,agent-epsilon:127.0.0.1:8645,agent-zeta:127.0.0.1:8646
+    volumes:
+      - ./profiles/beta:/home/hermes/.hermes/profile:rw
+      - ./data/beta/fts5:/data/memory/fts5:rw
+      - ./data/beta/chroma:/data/memory/chroma:rw
+      - ./data/beta/memorygraph:/data/memory/memorygraph:rw
