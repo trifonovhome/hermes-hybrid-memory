@@ -132,7 +132,7 @@ curl -X POST http://127.0.0.1:8711/memory/share \
 | `PEERS` | — | `name:host:port,...` for share/broadcast |
 | `EXTRACTION_MODEL` | deepseek-v4-pro | LLM for fact extraction |
 | `EMBED_MODEL` | bge-m3 | Embedding model |
-| `FTS5_DB` | /data/memory/fts5/trial_db.sqlite | FTS5 database path |
+| `FTS5_DB` | /data/memory/fts5/memory.db | FTS5 database path |
 | `CHROMA_DIR` | /data/memory/chroma | ChromaDB persistent directory |
 | `MEMORYGRAPH_DIR` | /data/memory/memorygraph | MemoryGraph database directory |
 

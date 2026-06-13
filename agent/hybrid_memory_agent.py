@@ -36,7 +36,7 @@ for p in PEERS_RAW.split(","):
 LITELLM_URL = os.environ.get("LITELLM_URL", "http://127.0.0.1:4000")
 LITELLM_KEY = os.environ.get("LITELLM_API_KEY", os.environ.get("LITELLM_KEY", ""))
 EMBED_MODEL = os.environ.get("EMBED_MODEL", "bge-m3")
-FTS5_DB = os.environ.get("FTS5_DB", "/data/fts5/trial_db.sqlite")
+FTS5_DB = os.environ.get("FTS5_DB", "/data/fts5/memory.db")
 CHROMA_DIR = os.environ.get("CHROMA_DIR", "/data/chroma")
 MEMORYGRAPH_DIR = os.environ.get("MEMORYGRAPH_DIR", "/data/memorygraph")
 LISTEN_HOST = os.environ.get("LISTEN_HOST", "127.0.0.1")
@@ -457,7 +457,9 @@ class MemoryAPIHandler(BaseHTTPRequestHandler):
             try:
                 conn = sqlite3.connect(FTS5_DB)
                 fts5_n = conn.execute("SELECT COUNT(*) FROM facts").fetchone()[0]; conn.close()
-            except Exception: fts5_n = 0
+            except Exception as ex:
+                print(f"[FTS5] Status error: {ex}", file=sys.stderr)
+                fts5_n = 0
             try:
                 if _init_mg():
                     async def _mg_count():

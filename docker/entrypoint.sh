@@ -16,7 +16,7 @@ echo "[entry] Agent: $AGENT_ID | Memory: $MEMORY_PORT | Agent port: $AGENT_PORT"
 
 # ---- (1) Start Memory API in background ----
 LISTEN_HOST=127.0.0.1 LISTEN_PORT=$MEMORY_PORT \
-    FTS5_DB=/data/memory/fts5/trial_db.sqlite \
+    FTS5_DB=/data/memory/fts5/memory.db \
     CHROMA_DIR=/data/memory/chroma \
     MEMORYGRAPH_DIR=/data/memory/memorygraph \
     AGENT_ID=$AGENT_ID \

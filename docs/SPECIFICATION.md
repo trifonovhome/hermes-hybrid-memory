@@ -27,7 +27,7 @@
     27|
     28|| Параметр | Значение |
     29||----------|----------|
-    30|| Хранилище | SQLite `/data/memory/fts5/trial_db.sqlite` |
+    30|| Хранилище | SQLite `/data/memory/fts5/memory.db` |
     31|| Индекс | FTS5 virtual table over `content` |
     32|| Поиск | BM25 keyword matching |
     33|| Латентность | < 1 ms |
@@ -213,7 +213,7 @@
    210|| `PEERS` | — | `name:host:port,name:host:port` |
    211|| `EXTRACTION_MODEL` | deepseek-v4-pro | LLM для экстракции фактов |
    212|| `EMBED_MODEL` | bge-m3 | Модель эмбеддингов |
-   213|| `FTS5_DB` | /data/fts5/trial_db.sqlite | Путь к SQLite FTS5 |
+   213|| `FTS5_DB` | /data/fts5/memory.db | Путь к SQLite FTS5 |
    214|| `CHROMA_DIR` | /data/chroma | Путь к ChromaDB |
    215|| `MEMORYGRAPH_DIR` | /data/memorygraph | Путь к MemoryGraph |
    216|| `CHROMA_COLLECTION` | memory_{AGENT_ID} | Имя коллекции Chroma (авто) |

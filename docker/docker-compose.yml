@@ -18,7 +18,7 @@ services:
       - AGENT_PORT=8647
       - MEMORY_PORT=8710
       - LISTEN_PORT=8710
-      - FTS5_DB=/data/memory/fts5/trial_db.sqlite
+      - FTS5_DB=/data/memory/fts5/memory.db
       - CHROMA_DIR=/data/memory/chroma
       - MEMORYGRAPH_DIR=/data/memory/memorygraph
       - LITELLM_URL=$${LITELLM_URL:-http://127.0.0.1:4000}
@@ -38,7 +38,7 @@ services:
       - AGENT_PORT=8642
       - MEMORY_PORT=8711
       - LISTEN_PORT=8711
-      - FTS5_DB=/data/memory/fts5/trial_db.sqlite
+      - FTS5_DB=/data/memory/fts5/memory.db
       - CHROMA_DIR=/data/memory/chroma
       - MEMORYGRAPH_DIR=/data/memory/memorygraph
       - LITELLM_URL=$${LITELLM_URL:-http://127.0.0.1:4000}
@@ -59,7 +59,7 @@ services:
       - AGENT_PORT=8643
       - MEMORY_PORT=8712
       - LISTEN_PORT=8712
-      - FTS5_DB=/data/memory/fts5/trial_db.sqlite
+      - FTS5_DB=/data/memory/fts5/memory.db
       - CHROMA_DIR=/data/memory/chroma
       - MEMORYGRAPH_DIR=/data/memory/memorygraph
       - LITELLM_URL=$${LITELLM_URL:-http://127.0.0.1:4000}
