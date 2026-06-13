@@ -1,0 +1,7 @@
+name: hybrid
+version: 1.0.0
+description: "Hybrid memory provider — FTS5 + Chroma semantic search via LiteLLM bge-m3 + MemoryGraph. SQLite-backed, no PostgreSQL. Replaces Honcho+Mem0."
+pip_dependencies: []
+hooks:
+  - on_session_end
+  - on_memory_write

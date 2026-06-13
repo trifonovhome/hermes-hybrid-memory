@@ -147,6 +147,21 @@ Recency boost applied across all backends: 1.0 (today) → 0.05 (90+ days).
 - [SPECIFICATION.md](docs/SPECIFICATION.md) — Full technical specification
 - [SKILL.md](SKILL.md) — Hermes Agent skill definition
 
+## Hermes Plugin
+
+The `plugin/` directory contains a Hermes Agent memory provider plugin.
+Install it to enable `hybrid_search` and `hybrid_status` tools in your agent:
+
+```bash
+# Copy plugin to Hermes plugins directory
+cp -r plugin/ ~/.hermes/hermes-agent/plugins/memory/hybrid/
+
+# Activate
+hermes config set memory.provider hybrid
+```
+
+The plugin reads from the same SQLite/Chroma databases used by the Docker containers.
+
 ## License
 
 MIT
