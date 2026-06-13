@@ -27,7 +27,7 @@ Hermes Gateway. Один Docker-образ (`Dockerfile.unified`), `AGENT_ID` з
 
 | Параметр | Значение |
 |----------|----------|
-| Хранилище | SQLite `/data/memory/fts5/trial_db.sqlite` |
+| Хранилище | SQLite `/data/memory/fts5/memory.db` |
 | Индекс | FTS5 virtual table over `content` |
 | Поиск | BM25 keyword matching |
 | Латентность | < 1 ms |
@@ -210,7 +210,7 @@ TUI (хост) ──→ Hermes Gateway :8642 (Docker) ──→ Headroom :8787 
 | `PEERS` | — | `name:host:port,name:host:port` |
 | `EXTRACTION_MODEL` | deepseek-v4-pro | LLM для экстракции фактов |
 | `EMBED_MODEL` | bge-m3 | Модель эмбеддингов |
-| `FTS5_DB` | /data/fts5/trial_db.sqlite | Путь к SQLite FTS5 |
+| `FTS5_DB` | /data/fts5/memory.db | Путь к SQLite FTS5 |
 | `CHROMA_DIR` | /data/chroma | Путь к ChromaDB |
 | `MEMORYGRAPH_DIR` | /data/memorygraph | Путь к MemoryGraph |
 | `CHROMA_COLLECTION` | memory_{AGENT_ID} | Имя коллекции Chroma (авто) |
