@@ -2,7 +2,7 @@ FROM python:3.12-slim
 
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
-    build-essential curl grep git ca-certificates && \
+    build-essential curl grep git ca-certificates age cmake && \
     rm -rf /var/lib/apt/lists/*
 
 RUN pip install --no-cache-dir \
@@ -13,7 +13,8 @@ RUN pip install --no-cache-dir \
     asyncpg \
     aiosqlite \
     Markdown \
-    aiohttp-socks
+    aiohttp-socks \
+    llama-cpp-python
 
 RUN python -m spacy download ru_core_news_sm && \
     python -m spacy download ru_core_news_md

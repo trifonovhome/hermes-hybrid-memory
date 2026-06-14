@@ -1,8 +1,8 @@
 # Hermes Hybrid Memory
 
 Per-agent hybrid memory stack for [Hermes Agent](https://github.com/nousresearch/hermes-agent).
-4 backends in one Docker container: FTS5 (keyword), Chroma + bge-m3 (semantic),
-Shared Pool (remote), MemoryGraph (graph + spaCy NLP).
+5 backends in one Docker container: FTS5 (keyword), Chroma (semantic, remote or local GGUF),
+Shared Pool (remote), MemoryGraph (graph + spaCy NLP), SecureStore (encrypted secrets).
 
 ## Architecture
 
@@ -22,14 +22,15 @@ agent-alpha (:8642)    agent-beta (:8643)     agent-gamma (:8647, shared master)
 - **agent-gamma** — shared master, SHARED_URL=http://127.0.0.1:8710
 - **agent-alpha / agent-beta** — изолированные агенты с share/broadcast
 
-## 4 Backends
+## 5 Backends
 
 | # | Backend | Storage | Search Type | Weight |
 |---|---------|---------|-------------|--------|
 | 1 | **FTS5** | SQLite | BM25 keyword, <1ms | 0.20× |
-| 2 | **Chroma + bge-m3** | ChromaDB | Cosine semantic, 50-200ms | 0.50× |
-| 3 | **Shared Pool** | Remote HTTP | agent-gamma :8710 | 0.45× |
-| 4 | **MemoryGraph** | SQLite + spaCy | Graph + FTS, recency boost | 0.15+ |
+| 2 | **Chroma** | ChromaDB | Semantic (bge-m3 remote or embeddinggemma-300M local GGUF) | 0.50× |
+| 3 | **Shared Pool** | Remote HTTP | Cross-agent facts | 0.45× |
+| 4 | **MemoryGraph** | SQLite + spaCy | Graph relationships + NER | 0.15× |
+| 5 | **SecureStore** 🆕 | Age-encrypted | Encrypted key-value (HA tokens, API keys) | — |
 
 ## Quick Start
 

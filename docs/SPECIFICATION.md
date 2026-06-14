@@ -1,6 +1,6 @@
-# Hermes Hybrid Memory — Спецификация v1.0
+# Hermes Hybrid Memory — Спецификация v1.1
 
-**Дата:** 13 июня 2026
+**Дата:** 14 июня 2026
 **Хост:** home-server (Linux 6.x, 64G RAM, 1TB NVMe)
 **Репо:** [github.com/trifonovhome/hermes-hybrid-memory](https://github.com/trifonovhome/hermes-hybrid-memory)
 
@@ -8,7 +8,7 @@
 
 ## 1. Обзор
 
-Гибридная память Hermes — это **per-agent** система с 4 бэкендами, работающая внутри
+Гибридная память Hermes — это **per-agent** система с 5 бэкендами, работающая внутри
 унифицированных Docker-контейнеров. Каждый контейнер содержит и Memory API, и
 Hermes Gateway. Один Docker-образ (`Dockerfile.unified`), `AGENT_ID` задаёт
 идентичность.
@@ -35,15 +35,20 @@ Hermes Gateway. Один Docker-образ (`Dockerfile.unified`), `AGENT_ID` з
 | Таблицы | `facts` (id, content, source, created_at, updated_at) + `facts_fts` (virtual) |
 | Сессии | `sessions` + `sessions_fts` (id, title, preview, content, message_count) |
 
-### 2.2 Chroma + bge-m3 — Semantic Understanding
+### 2.2 Chroma — Semantic Understanding
 
 | Параметр | Значение |
 |----------|----------|
 | Хранилище | ChromaDB Persistent `/data/memory/chroma/` |
-| Эмбеддинг | bge-m3 (1024-мерный), через `LITELLM_URL/v1/embeddings` |
+| **Эмбеддинг (удалённый)** | bge-m3 (1024-мерный), через `LITELLM_URL/v1/embeddings` |
+| **Эмбеддинг (локальный)** 🆕 | embeddinggemma-300M-Q8_0 (768-мерный), через llama-cpp-python |
+| **Выбор режима** | `LOCAL_EMBED_MODEL` задан → локальный GGUF, иначе LiteLLM |
 | Метрика | Cosine distance → similarity score |
-| Коллекции | `memory_{AGENT_ID}` (факты) + `sessions_{AGENT_ID}` (сессии) |
-| Латентность | 50–200 ms (включая embedding round-trip) |
+| Коллекции | `memory_{AGENT_ID}` + `sessions_{AGENT_ID}` |
+| Латентность (удалённый) | 50–200 ms |
+| Латентность (локальный) | 100–500 ms (CPU, 300M-параметров) |
+| Латентность (удалённый) | 50–200 ms (включая embedding round-trip) |
+| Латентность (локальный) | 100–500 ms (CPU-инференс 300M-параметров) |
 | Ресенси-буст | × (0.7 + 0.3 × recency_boost(created_at)) |
 
 ### 2.3 Shared Pool — Remote Facts
@@ -67,7 +72,20 @@ Hermes Gateway. Один Docker-образ (`Dockerfile.unified`), `AGENT_ID` з
 | Ресенси-буст | × (0.7 + 0.3 × recency_boost(created_at)) |
 | Вес в fusion | 0.15 + tag_bonus (до 0.05) |
 
-### 2.5 Ресенси-буст (единая формула)
+### 2.5 SecureStore — Encrypted Secrets
+
+| Параметр | Значение |
+|----------|----------|
+| Хранилище | Age-шифрованный файл `/data/secrets/secrets.enc` |
+| Ключ | `AGE_KEY` (env var) — age secret key |
+| Шифрование | age (rage) — X25519 + ChaCha20-Poly1305 |
+| API | `GET/POST/DELETE /memory/secrets` и `GET /memory/secrets/{key}` |
+| Использование | HA-токены, SSH-пароли, API-ключи |
+| Статус | Ключи видны в `/status` (`secrets` поле) |
+
+**Без `AGE_KEY` — SecureStore не активен** (503 на запросах).
+
+### 2.6 Ресенси-буст (единая формула)
 
 ```
 recency_boost(days):
@@ -145,6 +163,10 @@ TUI (хост) ──→ Hermes Gateway :8642 (Docker) ──→ Headroom :8787 
 | POST | `/memory/broadcast` | Отправить факт всем пирам |
 | POST | `/memory/sessions/search` | Поиск по истории чатов (FTS5 + Chroma) |
 | POST | `/memory/sessions/import` | Импорт сессии (из Honcho) |
+| GET | `/memory/secrets` | Список ключей SecureStore |
+| GET | `/memory/secrets/{key}` | Значение секрета |
+| POST | `/memory/secrets` | Сохранить `{"key":"...","value":"..."}` |
+| DELETE | `/memory/secrets/{key}` | Удалить секрет |
 
 ---
 
@@ -209,7 +231,11 @@ TUI (хост) ──→ Hermes Gateway :8642 (Docker) ──→ Headroom :8787 
 | `SHARED_URL` | http://127.0.0.1:8710 | Shared pool (agent-agent-gamma) |
 | `PEERS` | — | `name:host:port,name:host:port` |
 | `EXTRACTION_MODEL` | deepseek-v4-pro | LLM для экстракции фактов |
-| `EMBED_MODEL` | bge-m3 | Модель эмбеддингов |
+| `EMBED_MODEL` | bge-m3 | Модель эмбеддингов (LiteLLM) |
+| `LOCAL_EMBED_MODEL` | — | Путь к GGUF-файлу для локальных эмбеддингов |
+| `EMBED_MODEL_HF` | embeddinggemma-300M | HF-модель для авто-загрузки в entrypoint |
+| `SECRETS_FILE` | /data/secrets/secrets.enc | Путь к шифрованным секретам |
+| `AGE_KEY` | — | Age secret key для SecureStore |
 | `FTS5_DB` | /data/fts5/memory.db | Путь к SQLite FTS5 |
 | `CHROMA_DIR` | /data/chroma | Путь к ChromaDB |
 | `MEMORYGRAPH_DIR` | /data/memorygraph | Путь к MemoryGraph |
@@ -269,7 +295,19 @@ agent-delta/agent-epsilon/agent-zeta не запущены (Connection refused).
 - **Причина:** неограниченный `limit * 2` при передаче между unified_search → memorygraph_search
 - **Фикс:** `limit = min(max(1, limit), 100)` в `memorygraph_search` и `unified_search`
 
-### 8.6 hybrid_search из хоста
+### 8.6 Local embeddings
+- **Первая загрузка:** entrypoint авто-загружает GGUF с HuggingFace (~300 MB)
+- **Размерность:** embeddinggemma-300M даёт 768d (bge-m3 = 1024d) — коллекции несовместимы
+- **CPU:** Celeron N4000 (2 ядра) — ~200–500ms на эмбеддинг, достаточно для домашнего агента
+- **Память:** модель 300 MB + llama.cpp runtime ~50 MB — помещается в 512 MB RAM
+
+### 8.7 SecureStore
+- **Без `AGE_KEY`** — все запросы к `/memory/secrets` возвращают 503
+- **age** должен быть установлен в контейнере (`apt-get install age`)
+- **Запись атомарна:** `set()` перезаписывает весь файл заново
+- **Декрипт при старте** — если файл существует и `AGE_KEY` задан
+
+### 8.8 hybrid_search из хоста
 - **Stale Chroma:** `hybrid_status` может показывать `~/projects/chroma_direct`
  вместо контейнерной Chroma — проверять `chroma_dir` в ответе
 

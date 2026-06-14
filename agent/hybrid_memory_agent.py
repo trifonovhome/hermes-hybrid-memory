@@ -13,7 +13,7 @@ Endpoints:
   POST /memory/sessions/*  — session search/import
 """
 
-import json, sys, os, sqlite3, urllib.request, asyncio, datetime, uuid
+import json, sys, os, sqlite3, urllib.request, asyncio, datetime, uuid, subprocess, tempfile, pathlib
 from http.server import HTTPServer, BaseHTTPRequestHandler
 
 # ---------- Agent identity ----------
@@ -36,6 +36,7 @@ for p in PEERS_RAW.split(","):
 LITELLM_URL = os.environ.get("LITELLM_URL", "http://127.0.0.1:4000")
 LITELLM_KEY = os.environ.get("LITELLM_API_KEY", os.environ.get("LITELLM_KEY", ""))
 EMBED_MODEL = os.environ.get("EMBED_MODEL", "bge-m3")
+LOCAL_EMBED_MODEL = os.environ.get("LOCAL_EMBED_MODEL", "")  # path to GGUF file for local embeddings
 FTS5_DB = os.environ.get("FTS5_DB", "/data/fts5/memory.db")
 CHROMA_DIR = os.environ.get("CHROMA_DIR", "/data/chroma")
 MEMORYGRAPH_DIR = os.environ.get("MEMORYGRAPH_DIR", "/data/memorygraph")
@@ -55,6 +56,63 @@ EXTRACTION_SYSTEM_PROMPT = """Ты извлекаешь ключевые фак�
 - Факты должны быть полезны для будущего поиска (ключевые слова)
 - Максимум 5 фактов
 - Если в тексте нет значимых фактов — верни {"facts": []}"""
+
+# ---------- SecureStore ----------
+SECRETS_FILE = os.environ.get("SECRETS_FILE", "/data/secrets/secrets.enc")
+AGE_KEY = os.environ.get("AGE_KEY", "")
+
+class SecureStore:
+    """Age-encrypted key-value store for agent secrets."""
+    def __init__(self, path, age_key):
+        self.path = pathlib.Path(path)
+        self.age_key = age_key
+        self._data = {}
+        if self.age_key and self.path.exists():
+            self._decrypt()
+
+    def _decrypt(self):
+        try:
+            r = subprocess.run(
+                ["age", "-d", "-i", "-", str(self.path)],
+                input=self.age_key.encode(), capture_output=True, text=True, timeout=10
+            )
+            if r.returncode == 0 and r.stdout.strip():
+                for line in r.stdout.strip().split("\n"):
+                    line = line.strip()
+                    if "=" in line and not line.startswith("#"):
+                        k, v = line.split("=", 1)
+                        self._data[k.strip()] = v.strip()
+        except Exception as e:
+            print(f"[SecureStore] Decrypt error: {e}", file=sys.stderr)
+
+    def _encrypt(self):
+        try:
+            content = "\n".join(f"{k}={v}" for k, v in self._data.items())
+            self.path.parent.mkdir(parents=True, exist_ok=True)
+            r = subprocess.run(
+                ["age", "-e", "-i", "-", "-o", str(self.path)],
+                input=f"{self.age_key}\n{content}".encode(),
+                capture_output=True, text=True, timeout=10
+            )
+            if r.returncode != 0:
+                print(f"[SecureStore] Encrypt error: {r.stderr}", file=sys.stderr)
+        except Exception as e:
+            print(f"[SecureStore] Encrypt error: {e}", file=sys.stderr)
+
+    def list_keys(self): return sorted(self._data.keys())
+    def get(self, key): return self._data.get(key)
+    def set(self, key, value):
+        self._data[key] = value
+        self._encrypt()
+        return True
+    def delete(self, key):
+        if key in self._data:
+            del self._data[key]
+            self._encrypt()
+            return True
+        return False
+
+_secrets_store = SecureStore(SECRETS_FILE, AGE_KEY) if AGE_KEY else None
 
 # ---------- FTS5 ----------
 def _init_fts5():
@@ -129,8 +187,30 @@ def fts5_store(content: str) -> bool:
     except Exception as e:
         print(f"[FTS5] Store error: {e}", file=sys.stderr); return False
 
-# ---------- LiteLLM Embedding ----------
-def embed_litellm(texts: list) -> list:
+# ---------- Embedding (local GGUF or LiteLLM) ----------
+_local_embed_model = None
+
+def _load_local_embed():
+    global _local_embed_model
+    if _local_embed_model is None and LOCAL_EMBED_MODEL:
+        from llama_cpp import Llama
+        print(f"[Embed] Loading local model: {LOCAL_EMBED_MODEL}", file=sys.stderr)
+        _local_embed_model = Llama(
+            model_path=LOCAL_EMBED_MODEL, embedding=True,
+            verbose=False, n_gpu_layers=0, n_ctx=512
+        )
+    return _local_embed_model
+
+def embed_local(texts: list) -> list:
+    llm = _load_local_embed()
+    if not llm: return []
+    embeddings = []
+    for text in texts:
+        result = llm.create_embedding(text)
+        embeddings.append(result["embedding"])
+    return embeddings
+
+def _embed_litellm(texts: list) -> list:
     try:
         payload = json.dumps({"model": EMBED_MODEL, "input": texts}).encode()
         req = urllib.request.Request(f"{LITELLM_URL}/v1/embeddings", data=payload,
@@ -139,6 +219,13 @@ def embed_litellm(texts: list) -> list:
         return [d["embedding"] for d in resp["data"]]
     except Exception as e:
         print(f"[Embed] Error: {e}", file=sys.stderr); return []
+
+# Choose embedding backend
+if LOCAL_EMBED_MODEL:
+    embed = embed_local
+    print(f"[Embed] Local mode: {LOCAL_EMBED_MODEL}", file=sys.stderr)
+else:
+    embed = _embed_litellm
 
 # ---------- Chroma ----------
 _chroma_client = None
@@ -150,7 +237,7 @@ def _get_chroma():
     return _chroma_client
 
 def chroma_search(query: str, limit: int = 10) -> list:
-    emb = embed_litellm([query])
+    emb = embed([query])
     if not emb: return []
     try:
         client = _get_chroma()
@@ -177,7 +264,7 @@ def chroma_search(query: str, limit: int = 10) -> list:
         print(f"[Chroma] Search error: {e}", file=sys.stderr); return []
 
 def chroma_store(content: str) -> bool:
-    emb = embed_litellm([content])
+    emb = embed([content])
     if not emb: return False
     try:
         client = _get_chroma()
@@ -417,7 +504,7 @@ def session_search(query: str, limit: int = 5) -> dict:
         results = [{"session_id": r["id"], "title": r["title"] or "", "preview": (r["preview"] or "")[:200],
                     "message_count": r["message_count"] or 0, "backend": "fts5_sessions"} for r in rows]
         conn.close()
-        emb = embed_litellm([query])
+        emb = embed([query])
         if emb:
             try:
                 client = _get_chroma()
@@ -470,7 +557,30 @@ class MemoryAPIHandler(BaseHTTPRequestHandler):
                     loop.close()
                 else: mg_n = 0
             except Exception: mg_n = 0
-            self._send_json({"agent": AGENT_ID, "fts5": fts5_n, "chroma": chroma_n, "memorygraph": mg_n})
+            self._send_json({"agent": AGENT_ID, "fts5": fts5_n, "chroma": chroma_n, "memorygraph": mg_n,
+                             "secrets": len(_secrets_store.list_keys()) if _secrets_store else 0})
+        elif self.path.startswith("/memory/secrets"):
+            if not _secrets_store:
+                self._send_json({"error": "SecureStore not configured (AGE_KEY unset)"}, 503)
+            elif self.path == "/memory/secrets":
+                self._send_json({"keys": _secrets_store.list_keys(), "agent": AGENT_ID})
+            else:
+                key = self.path[len("/memory/secrets/"):]
+                val = _secrets_store.get(key)
+                if val is not None:
+                    self._send_json({"key": key, "value": val})
+                else:
+                    self._send_json({"error": f"key not found: {key}"}, 404)
+        else:
+            self._send_json({"error":"not found"}, 404)
+
+    def do_DELETE(self):
+        if self.path.startswith("/memory/secrets/") and _secrets_store:
+            key = self.path[len("/memory/secrets/"):]
+            if _secrets_store.delete(key):
+                self._send_json({"deleted": key})
+            else:
+                self._send_json({"error": f"key not found: {key}"}, 404)
         else:
             self._send_json({"error":"not found"}, 404)
 
@@ -568,7 +678,7 @@ class MemoryAPIHandler(BaseHTTPRequestHandler):
             except Exception as e:
                 fts5_ok = False
             finally: conn.close()
-            emb = embed_litellm([preview]); chroma_ok = False
+            emb = embed([preview]); chroma_ok = False
             if emb:
                 try:
                     client = _get_chroma()
@@ -579,6 +689,14 @@ class MemoryAPIHandler(BaseHTTPRequestHandler):
                 except Exception: pass
             self._send_json({"session_id":sid,"title":title,"message_count":len(messages),
                              "stored":{"fts5":fts5_ok,"chroma":chroma_ok}})
+
+        # ---- Secrets: store ----
+        elif self.path == "/memory/secrets" and _secrets_store:
+            key = body.get("key",""); value = body.get("value","")
+            if not key: self._send_json({"error":"key required"}, 400); return
+            if not value: self._send_json({"error":"value required"}, 400); return
+            _secrets_store.set(key, value)
+            self._send_json({"stored": key, "agent": AGENT_ID})
 
         else:
             self._send_json({"error":"not found"}, 404)
