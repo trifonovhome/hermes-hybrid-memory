@@ -207,7 +207,12 @@ def embed_local(texts: list) -> list:
     embeddings = []
     for text in texts:
         result = llm.create_embedding(text)
-        embeddings.append(result["embedding"])
+        # Handle both return formats: embedding key or data[0].embedding
+        emb = result.get("embedding") or (
+            result.get("data", [{}])[0].get("embedding") if result.get("data") else None
+        )
+        if emb:
+            embeddings.append(emb)
     return embeddings
 
 def _embed_litellm(texts: list) -> list:
