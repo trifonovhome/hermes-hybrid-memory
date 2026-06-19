@@ -5,11 +5,8 @@ Agent identity is set via AGENT_ID env var (container-level), not request body.
 
 Endpoints:
   GET  /health, /status
-  POST /memory/search      — search own + shared pool
+  POST /memory/search      — search own memory
   POST /memory/extract     — LLM extraction → own storage
-  POST /memory/share       — send fact to another agent's container
-  POST /memory/receive     — receive fact from another agent
-  POST /memory/broadcast   — send fact to all peers
   POST /memory/sessions/*  — session search/import
 """
 
@@ -18,19 +15,6 @@ from http.server import HTTPServer, BaseHTTPRequestHandler
 
 # ---------- Agent identity ----------
 AGENT_ID = os.environ.get("AGENT_ID", "agent-alpha")
-SHARED_URL = os.environ.get("SHARED_URL", "http://127.0.0.1:8710")
-PEERS_RAW = os.environ.get("PEERS", "")
-
-# Parse peers: name:host:port,name:host:port
-PEERS = {}
-for p in PEERS_RAW.split(","):
-    p = p.strip()
-    if ":" in p:
-        parts = p.split(":")
-        if len(parts) >= 3:
-            PEERS[parts[0]] = f"http://{parts[1]}:{parts[2]}"
-        elif len(parts) == 2:
-            PEERS[parts[0]] = f"http://{parts[0]}:{parts[1]}"
 
 # ---------- Config ----------
 LITELLM_URL = os.environ.get("LITELLM_URL", "http://127.0.0.1:4000")
@@ -281,21 +265,6 @@ def chroma_store(content: str) -> bool:
     except Exception as e:
         print(f"[Chroma] Store error: {e}", file=sys.stderr); return False
 
-# ---------- Shared Pool (remote) ----------
-def shared_pool_search(query: str, limit: int = 10) -> list:
-    """Query the shared memory container."""
-    if AGENT_ID == "shared": return []  # shared doesn't query itself
-    try:
-        payload = json.dumps({"query": query, "limit": limit}).encode()
-        req = urllib.request.Request(f"{SHARED_URL}/memory/search", data=payload,
-            headers={"Content-Type":"application/json"}, method="POST")
-        resp = json.loads(urllib.request.urlopen(req, timeout=10).read())
-        results = resp.get("results", [])
-        for r in results: r["backend"] = "shared"
-        return results
-    except Exception as e:
-        print(f"[Shared] Search error: {e}", file=sys.stderr); return []
-
 # ---------- MemoryGraph ----------
 _mg_db: dict = {}
 _mg_backend: dict = {}
@@ -434,28 +403,24 @@ def unified_search(query: str, limit: int = 5) -> dict:
     limit = min(max(1, limit), 100)  # safety clamp
     fts5_hits = fts5_search(query, limit * 2)
     chroma_hits = chroma_search(query, limit * 2)
-    shared_hits = shared_pool_search(query, limit * 2)
     mg_hits = memorygraph_search(query, limit * 2)
 
     seen = set(); merged = []
-    for h in shared_hits:
-        key = _norm_key(h["content"])
-        if key not in seen: seen.add(key); h["fusion"] = 0.45 * h.get("score", 0.2); merged.append(h)
     for h in chroma_hits:
         key = _norm_key(h["content"])
-        if key not in seen: seen.add(key); h["fusion"] = 0.50 * h["score"]; merged.append(h)
+        if key not in seen: seen.add(key); h["fusion"] = 0.45 * h["score"]; merged.append(h)
     for h in fts5_hits:
         key = _norm_key(h["content"]); bm25 = h.get("bm25", 0.1)
         if key in seen:
             for m in merged:
                 if _norm_key(m["content"]) == key:
-                    m["fusion"] += 0.20 * min(1.0, bm25 + 0.2); m["keyword_match"] = True; break
+                    m["fusion"] += 0.25 * min(1.0, bm25 + 0.2); m["keyword_match"] = True; break
         else:
-            seen.add(key); h["fusion"] = 0.20 * min(1.0, bm25 + 0.2); merged.append(h)
+            seen.add(key); h["fusion"] = 0.25 * min(1.0, bm25 + 0.2); merged.append(h)
     for h in mg_hits:
         key = _norm_key(h["content"])
         tag_bonus = min(0.05, len(h.get("tags", [])) * 0.01)
-        mg_score = 0.15 + tag_bonus
+        mg_score = 0.30 + tag_bonus
         if key in seen:
             for m in merged:
                 if _norm_key(m["content"]) == key:
@@ -465,7 +430,7 @@ def unified_search(query: str, limit: int = 5) -> dict:
     merged.sort(key=lambda x: x["fusion"], reverse=True)
     return {"query": query, "results": merged[:limit],
             "backends": {"fts5": len(fts5_hits), "chroma": len(chroma_hits),
-                         "shared": len(shared_hits), "memorygraph": len(mg_hits)}}
+                         "memorygraph": len(mg_hits)}}
 
 # ---------- LLM Extraction ----------
 def extract_facts_via_llm(text: str) -> list:
@@ -617,48 +582,6 @@ class MemoryAPIHandler(BaseHTTPRequestHandler):
                              "stored": {"fts5": s_fts5, "chroma": s_chroma, "memorygraph": s_mg},
                              "model": EXTRACTION_MODEL, "agent": AGENT_ID})
 
-        # ---- Share: send to another agent's container ----
-        elif self.path == "/memory/share":
-            to_agent = body.get("to", ""); fact = body.get("fact", "")
-            if not to_agent or not fact: self._send_json({"error":"to and fact required"}, 400); return
-            target_url = PEERS.get(to_agent)
-            if not target_url:
-                self._send_json({"error": f"unknown peer: {to_agent}", "peers": list(PEERS.keys())}, 400); return
-            try:
-                payload = json.dumps({"from": AGENT_ID, "fact": fact}).encode()
-                req = urllib.request.Request(f"{target_url}/memory/receive", data=payload,
-                    headers={"Content-Type":"application/json"}, method="POST")
-                resp = json.loads(urllib.request.urlopen(req, timeout=10).read())
-                self._send_json({"from": AGENT_ID, "to": to_agent, "received": resp.get("status") == "stored"})
-            except Exception as e:
-                self._send_json({"from": AGENT_ID, "to": to_agent, "error": str(e)[:100]})
-
-        # ---- Receive: called by another agent's /memory/share ----
-        elif self.path == "/memory/receive":
-            from_agent = body.get("from", "?"); fact = body.get("fact", "")
-            if not fact: self._send_json({"error":"fact required"}, 400); return
-            fts5_ok = fts5_store(fact)
-            chroma_ok = chroma_store(fact)
-            mg_ok = memorygraph_store(fact, from_agent)
-            self._send_json({"status": "stored" if (fts5_ok or chroma_ok or mg_ok) else "failed",
-                             "from": from_agent, "fts5": fts5_ok, "chroma": chroma_ok, "memorygraph": mg_ok})
-
-        # ---- Broadcast: send to all peers ----
-        elif self.path == "/memory/broadcast":
-            fact = body.get("fact", "")
-            if not fact: self._send_json({"error":"fact required"}, 400); return
-            results = {}
-            for name, url in PEERS.items():
-                try:
-                    payload = json.dumps({"from": AGENT_ID, "fact": fact}).encode()
-                    req = urllib.request.Request(f"{url}/memory/receive", data=payload,
-                        headers={"Content-Type":"application/json"}, method="POST")
-                    resp = json.loads(urllib.request.urlopen(req, timeout=10).read())
-                    results[name] = resp.get("status") == "stored"
-                except Exception as e:
-                    results[name] = str(e)[:60]
-            self._send_json({"from": AGENT_ID, "broadcasted_to": results})
-
         # ---- Session search ----
         elif self.path == "/memory/sessions/search":
             query = body.get("query", ""); limit = body.get("limit", 5)
@@ -711,7 +634,6 @@ class MemoryAPIHandler(BaseHTTPRequestHandler):
 
 if __name__ == "__main__":
     print(f"[{AGENT_ID}] Memory API on {LISTEN_HOST}:{LISTEN_PORT}", file=sys.stderr)
-    print(f"  Peers: {PEERS}, Shared: {SHARED_URL}", file=sys.stderr)
     server = HTTPServer((LISTEN_HOST, LISTEN_PORT), MemoryAPIHandler)
     try: server.serve_forever()
     except KeyboardInterrupt: server.shutdown()
