@@ -184,12 +184,20 @@ curl -X POST http://127.0.0.1:8711/memory/search \
 ## Плагин Hermes
 
 Директория `plugin/` содержит плагин memory provider для Hermes Agent.
-Установите его для активации инструментов `hybrid_search` и `hybrid_status`:
+Установите его для активации инструментов `hybrid_search`, `hybrid_status` и `hybrid_secure_get`:
 
 ```bash
 cp -r plugin/ ~/.hermes/hermes-agent/plugins/memory/hybrid/
 hermes config set memory.provider hybrid
 ```
+
+**Инструменты:**
+
+| Инструмент | Описание |
+|-----------|----------|
+| `hybrid_search(query, n)` | Поиск по трём бэкендам |
+| `hybrid_status` | Состояние бэкендов и размеры баз |
+| `hybrid_secure_get(key)` | Получить секрет из зашифрованного SecureStore |
 
 Плагин читает те же базы SQLite/Chroma, что используются Docker-контейнерами.
 

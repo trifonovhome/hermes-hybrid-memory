@@ -184,12 +184,20 @@ Sorted by fusion score descending, trimmed to limit.
 ## Hermes Plugin
 
 The `plugin/` directory contains a Hermes Agent memory provider plugin.
-Install it to enable `hybrid_search` and `hybrid_status` tools in your agent:
+Install it to enable `hybrid_search`, `hybrid_status`, and `hybrid_secure_get` tools:
 
 ```bash
 cp -r plugin/ ~/.hermes/hermes-agent/plugins/memory/hybrid/
 hermes config set memory.provider hybrid
 ```
+
+**Tools:**
+
+| Tool | Description |
+|------|-------------|
+| `hybrid_search(query, n)` | Fused 3-backend search |
+| `hybrid_status` | Backend health and database sizes |
+| `hybrid_secure_get(key)` | Retrieve secret from encrypted SecureStore |
 
 The plugin reads from the same SQLite/Chroma databases used by the Docker containers.
 

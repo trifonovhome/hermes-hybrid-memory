@@ -21,6 +21,10 @@ _Third public release. Documentation overhaul and architecture cleanup._
 - Detailed timestamp documentation — storage locations, formats, reindex behavior ([`1e18bb6`](https://github.com/trifonovhome/hermes-hybrid-memory/commit/1e18bb6))
 - Dynamic `system_prompt_block` in plugin — reads real backend counts ([`0a44cc7`](https://github.com/trifonovhome/hermes-hybrid-memory/commit/0a44cc7))
 - `AGENTS.md` upgrade guide for AI agents (EN + RU) ([`2549e7e`](https://github.com/trifonovhome/hermes-hybrid-memory/commit/2549e7e))
+- Expanded SecureStore documentation — key generation, API examples, security properties ([`ba1c86b`](https://github.com/trifonovhome/hermes-hybrid-memory/commit/ba1c86b))
+- `hybrid_secure_get(key)` plugin tool — retrieve secrets from agent's encrypted SecureStore ([`3d4d012`](https://github.com/trifonovhome/hermes-hybrid-memory/commit/3d4d012))
+- SecureStore section in SKILL.md — endpoints, env vars, usage from agent code ([`3f45d1a`](https://github.com/trifonovhome/hermes-hybrid-memory/commit/3f45d1a))
+- `CHANGELOG.md` in common-changelog format ([`893580e`](https://github.com/trifonovhome/hermes-hybrid-memory/commit/893580e))
 
 ### Removed
 
