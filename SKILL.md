@@ -1,36 +1,32 @@
 ---
 name: hermes-hybrid-memory
-description: Per-agent hybrid memory stack (FTS5 + Chroma bge-m3 + Shared Pool + MemoryGraph) for Hermes Agent.
-version: 1.0.0
+description: Per-agent hybrid memory stack (FTS5 + Chroma embeddinggemma-300M + MemoryGraph) for Hermes Agent.
+version: 1.2.0
 ---
 
 # Hermes Hybrid Memory
 
-Per-agent memory stack with 4 backends. One Docker image, one entrypoint — `AGENT_ID` determines identity.
+Per-agent memory stack with 3 backends. One Docker image, one entrypoint — `AGENT_ID` determines identity.
 
 ## Architecture
 
 ```
-agent-alpha (:8642)    agent-beta (:8643)     agent-gamma (:8647)
-┌──────────────────┐   ┌──────────────────┐   ┌───────────────────────┐
-│ Hermes Gateway   │   │ Hermes Gateway   │   │ Hermes Gateway        │
-│ Memory API :8711 │   │ Memory API :8712 │   │ Memory API :8710 ⭐   │
-└──────┬───────────┘   └──────┬───────────┘   └───────────┬───────────┘
-       │ share/broadcast      │                           │
-       └──────────────────────┴───────────────────────────┘
-            все читают agent-gamma (:8710) как SHARED_URL
+agent-alpha (:8642)    agent-beta (:8643)
+┌──────────────────┐   ┌──────────────────┐
+│ Hermes Gateway   │   │ Hermes Gateway   │
+│ Memory API :8711 │   │ Memory API :8712 │
+│ FTS5 + Chroma    │   │ FTS5 + Chroma    │
+│ + MemoryGraph    │   │ + MemoryGraph    │
+└──────────────────┘   └──────────────────┘
+    isolated agents — each with its own memory
 ```
-
-- **agent-gamma** — shared master, `SHARED_URL=http://127.0.0.1:8710`
-- **agent-alpha/beta** — изолированные, обмениваются через `/memory/share` и `/memory/broadcast`
-- Все три — **один Docker-образ**, `AGENT_ID` определяет роль, `network_mode: host`
 
 ## Quick Start
 
 ```bash
 git clone https://github.com/trifonovhome/hermes-hybrid-memory.git
 cd hermes-hybrid-memory
-mkdir -p data/{alpha,beta,gamma}/{fts5,chroma,memorygraph}
+mkdir -p data/{alpha,beta}/{fts5,chroma,memorygraph}
 mkdir -p profiles/{alpha,beta}
 chown -R 1000:1000 data/ profiles/
 docker compose -f docker/docker-compose.yml build --no-cache
@@ -41,13 +37,12 @@ docker compose -f docker/docker-compose.yml up -d
 
 | Method | Path | Description |
 |--------|------|-------------|
-| POST | `/memory/search` | Unified 4-backend search |
+| GET | `/health` | `{"status":"ok","agent":"..."}` |
+| GET | `/status` | `{"fts5":N,"chroma":N,"memorygraph":N}` |
+| POST | `/memory/search` | Unified 3-backend search |
 | POST | `/memory/extract` | LLM fact extraction → all backends |
-| POST | `/memory/share` | Send fact to another agent's container |
-| POST | `/memory/receive` | Receive fact from another agent |
-| POST | `/memory/broadcast` | Send fact to all peers |
 | POST | `/memory/sessions/search` | FTS5 + Chroma session search |
-| POST | `/memory/sessions/import` | Import session from Honcho |
+| POST | `/memory/sessions/import` | Import session |
 
 ## Environment Variables
 
@@ -57,20 +52,29 @@ docker compose -f docker/docker-compose.yml up -d
 | `AGENT_PORT` | 8642 | Hermes gateway port |
 | `MEMORY_PORT` | 8711 | Memory API port |
 | `LISTEN_PORT` | 8711 | Actual bind port |
-| `LITELLM_URL` | http://127.0.0.1:4000 | LiteLLM proxy |
-| `SHARED_URL` | http://127.0.0.1:8710 | Shared pool (agent-gamma) |
-| `PEERS` | — | `name:host:port` for share/broadcast |
-| `EXTRACTION_MODEL` | deepseek-v4-pro | LLM for fact extraction |
-| `EMBED_MODEL` | bge-m3 | Embedding model |
+| `LOCAL_EMBED_MODEL` | `/data/models/embeddinggemma-300M-Q8_0.gguf` | Local GGUF embedding model |
+| `FTS5_DB` | /data/fts5/memory.db | FTS5 database path |
+| `CHROMA_DIR` | /data/chroma | ChromaDB directory |
+| `MEMORYGRAPH_DIR` | /data/memorygraph | MemoryGraph directory |
 
 ## Fusion Weights
 
 | Backend | Weight | Role |
 |---------|--------|------|
-| shared pool | 0.45 × score | Remote shared facts |
-| Chroma | 0.50 × score | Semantic similarity |
-| FTS5 | 0.20 × bm25_norm | Keyword precision |
-| MemoryGraph | 0.15 + tag_bonus | Graph relationships |
+| Chroma | 0.45 × score | Semantic similarity |
+| FTS5 | 0.25 × bm25_norm | Keyword precision |
+| MemoryGraph | 0.30 + tag_bonus | Graph relationships |
+
+All backends use recency boost: `score × (0.7 + 0.3 × recency_boost(created_at))`.
+
+## Docs
+
+- [README.md](README.md) — Overview and quick start
+- [README.ru.md](README.ru.md) — Russian version
+- [docs/SPECIFICATION.md](docs/SPECIFICATION.md) — Full technical specification
+- [docs/SPECIFICATION.ru.md](docs/SPECIFICATION.ru.md) — Russian version
+- [AGENTS.md](AGENTS.md) — Upgrade guide for AI agents
+- [AGENTS.ru.md](AGENTS.ru.md) — Russian version
 
 ## Repo
 

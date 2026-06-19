@@ -1,5 +1,7 @@
 # Hermes Hybrid Memory
 
+[🇷🇺 Русская версия](README.ru.md)
+
 Per-agent hybrid memory stack for [Hermes Agent](https://github.com/nousresearch/hermes-agent).
 **3 backends in one Docker container + host plugin**: FTS5 (keyword), Chroma (semantic, local GGUF),
 MemoryGraph (graph relationships). + SecureStore (encrypted secrets).
@@ -14,7 +16,7 @@ agent-alpha (:8642)    agent-beta (:8643)
 │ FTS5 + Chroma    │   │ FTS5 + Chroma    │
 │ + MemoryGraph    │   │ + MemoryGraph    │
 └──────────────────┘   └──────────────────┘
-     изолированные агенты — каждый со своей памятью
+    isolated agents — each with its own memory
 ```
 
 ## 3 Backends
@@ -30,40 +32,40 @@ Chroma collection name: `memory_{AGENT_ID}` (auto-generated per agent).
 
 ## Recency Boost (Timestamps)
 
-Все факты хранятся с меткой времени `created_at` (ISO 8601). При поиске
-применяется буст свежести к базовому скору каждого бэкенда:
+Every fact stores a `created_at` timestamp (ISO 8601). At search time,
+a recency boost is applied to each backend's base score:
 
 ```
 final_score = base_score × (0.7 + 0.3 × recency_boost(created_at))
 ```
 
-### Формула recency_boost
+### recency_boost formula
 
 ```
-дней с момента создания    boost    множитель к скору
-──────────────────────    ──────    ─────────────────
-сегодня                    1.00     × (0.7 + 0.30) = ×1.00
-1–7 дней               1.00→0.60   × (0.7 + 0.30)→(0.7 + 0.18)
-8–30 дней              0.60→0.30   × (0.7 + 0.18)→(0.7 + 0.09)
-31–90 дней             0.30→0.05   × (0.7 + 0.09)→(0.7 + 0.015)
-90+ дней                  0.05      × (0.7 + 0.015) = ×0.715
+days since creation    boost    score multiplier
+──────────────────    ──────    ─────────────────
+today                   1.00    × (0.7 + 0.30) = ×1.00
+1–7 days            1.00→0.60   × (0.7 + 0.30)→(0.7 + 0.18)
+8–30 days           0.60→0.30   × (0.7 + 0.18)→(0.7 + 0.09)
+31–90 days          0.30→0.05   × (0.7 + 0.09)→(0.7 + 0.015)
+90+ days               0.05     × (0.7 + 0.015) = ×0.715
 ```
 
-- Свежие факты (сегодня): полный вес
-- Недельной давности: 88–100% веса
-- Месячной давности: 79–88% веса
-- Старые (90+ дней): сохраняют 71.5% веса — никогда не обнуляются
+- Today: full weight
+- 1 week: 88–100% weight
+- 1 month: 79–88% weight
+- 90+ days: retains 71.5% weight — never zero
 
-### Где хранятся таймстемпы
+### Where timestamps are stored
 
-| Backend | Поле | Формат |
-|---------|------|--------|
-| FTS5 | `facts.created_at` (колонка SQLite) | ISO 8601 с timezone |
-| Chroma | `metadatas["created_at"]` | ISO 8601 Z-суффикс |
-| MemoryGraph | `nodes.created_at` (колонка SQLite) | `YYYY-MM-DD HH:MM:SS` |
+| Backend | Field | Format |
+|---------|-------|--------|
+| FTS5 | `facts.created_at` (SQLite column) | ISO 8601 with timezone |
+| Chroma | `metadatas["created_at"]` | ISO 8601 Z-suffix |
+| MemoryGraph | `nodes.created_at` (SQLite column) | `YYYY-MM-DD HH:MM:SS` |
 
-Таймстемпы записываются при создании факта. При переиндексации (FTS5→Chroma)
-таймстемпы переносятся атомарно — старым фактам не назначается текущая дата.
+Timestamps are written at fact creation. During reindexing (FTS5→Chroma),
+timestamps are transferred atomically — old facts don't get today's date.
 
 ## Quick Start
 
@@ -173,8 +175,10 @@ Sorted by fusion score descending, trimmed to limit.
 ## Docs
 
 - [SPECIFICATION.md](docs/SPECIFICATION.md) — Full technical specification
+- [SPECIFICATION.ru.md](docs/SPECIFICATION.ru.md) — Russian version
 - [SKILL.md](SKILL.md) — Hermes Agent skill definition
 - [AGENTS.md](AGENTS.md) — Upgrade instructions for AI agents
+- [AGENTS.ru.md](AGENTS.ru.md) — Russian version
 
 ## Hermes Plugin
 
@@ -182,10 +186,7 @@ The `plugin/` directory contains a Hermes Agent memory provider plugin.
 Install it to enable `hybrid_search` and `hybrid_status` tools in your agent:
 
 ```bash
-# Copy plugin to Hermes plugins directory
 cp -r plugin/ ~/.hermes/hermes-agent/plugins/memory/hybrid/
-
-# Activate
 hermes config set memory.provider hybrid
 ```
 
