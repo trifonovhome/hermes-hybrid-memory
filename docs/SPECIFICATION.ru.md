@@ -57,18 +57,67 @@ Hermes Gateway. Один Docker-образ, `AGENT_ID` задаёт иденти
 | Ресенси-буст | × (0.7 + 0.3 × recency_boost(created_at)) |
 | Вес в fusion | 0.30 + tag_bonus (до 0.05) |
 
-### 2.4 SecureStore — Encrypted Secrets
+### 2.4 SecureStore — Шифрованные секреты
 
 | Параметр | Значение |
 |----------|----------|
 | Хранилище | Age-шифрованный файл `/data/secrets/secrets.enc` |
 | Ключ | `AGE_KEY` (env var) — age secret key |
 | Шифрование | age (rage) — X25519 + ChaCha20-Poly1305 |
+| Формат | Строки `key=value`, по одной на строку |
 | API | `GET/POST/DELETE /memory/secrets` и `GET /memory/secrets/{key}` |
 | Использование | HA-токены, SSH-пароли, API-ключи |
-| Статус | Ключи видны в `/status` (`secrets` поле) |
+| Статус | Количество ключей видно в `/status` (`secrets` поле) |
 
-**Без `AGE_KEY` — SecureStore не активен** (503 на запросах).
+**Без `AGE_KEY` SecureStore не активен** — все запросы к `/memory/secrets` возвращают 503.
+
+**Генерация ключа:**
+
+```bash
+# Сгенерировать пару age-ключей
+age-keygen -o key.txt
+
+# Извлечь секретный ключ (использовать как AGE_KEY)
+grep "AGE-SECRET-KEY-" key.txt
+
+# Пример вывода:
+# AGE-SECRET-KEY-1QV7LZ2...3XYZ
+```
+
+**Как работает:**
+
+1. При запуске, если `AGE_KEY` задан и файл секретов существует — содержимое расшифровывается в память
+2. Все операции читают/пишут словарь в памяти; `set()` и `delete()` вызывают атомарное перешифрование
+3. Формат файла: простые строки `key=value` внутри age-шифрованной оболочки
+4. Комментарии (`#`) игнорируются при расшифровке
+
+**Примеры API:**
+
+```bash
+# Сохранить секрет
+curl -X POST http://127.0.0.1:8711/memory/secrets \
+  -H 'Content-Type: application/json' \
+  -d '{"key":"ha_token","value":"eyJhbGciOiJIUzI1NiIs..."}'
+
+# Прочитать секрет
+curl http://127.0.0.1:8711/memory/secrets/ha_token
+# → {"key":"ha_token","value":"eyJhbGciOiJIUzI1NiIs..."}
+
+# Список всех ключей (значения скрыты)
+curl http://127.0.0.1:8711/memory/secrets
+# → {"keys":["ha_token"],"agent":"andrei"}
+
+# Удалить секрет
+curl -X DELETE http://127.0.0.1:8711/memory/secrets/ha_token
+```
+
+**Свойства безопасности:**
+
+- Секреты никогда не записываются на диск в открытом виде — всегда age-шифрованы
+- Расшифрованное содержимое живёт только в памяти
+- Права на файл зависят от UID контейнера (по умолчанию 1000:1000)
+- Атомарная запись: весь файл перезаписывается при каждом `set()`/`delete()`
+- Потеря `AGE_KEY` = потеря секретов (восстановление невозможно)
 
 ### 2.5 Recency Boost (Timestamps)
 

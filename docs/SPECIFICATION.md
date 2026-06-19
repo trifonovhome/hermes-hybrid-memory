@@ -64,10 +64,60 @@ One Docker image, `AGENT_ID` determines identity.
 | Storage | Age-encrypted file `/data/secrets/secrets.enc` |
 | Key | `AGE_KEY` (env var) — age secret key |
 | Encryption | age (rage) — X25519 + ChaCha20-Poly1305 |
+| Format | `key=value` lines, one per line |
 | API | `GET/POST/DELETE /memory/secrets` and `GET /memory/secrets/{key}` |
 | Use cases | HA tokens, SSH passwords, API keys |
+| Status | Key count visible in `/status` (`secrets` field) |
 
-Without `AGE_KEY`, SecureStore returns 503.
+Without `AGE_KEY`, SecureStore is inactive — all `/memory/secrets` requests return 503.
+
+**Key generation:**
+
+```bash
+# Generate an age key pair
+age-keygen -o key.txt
+
+# Extract the secret key (use as AGE_KEY)
+grep "AGE-SECRET-KEY-" key.txt
+
+# Example output:
+# AGE-SECRET-KEY-1QV7LZ2...3XYZ
+```
+
+**How it works:**
+
+1. At startup, if `AGE_KEY` is set and secrets file exists, content is decrypted into memory
+2. All operations read/write in-memory dict; `set()` and `delete()` trigger atomic re-encryption
+3. File format: plain `key=value` lines inside age-encrypted envelope
+4. Comments (`#`) are ignored on decrypt
+
+**API examples:**
+
+```bash
+# Store a secret
+curl -X POST http://127.0.0.1:8711/memory/secrets \
+  -H 'Content-Type: application/json' \
+  -d '{"key":"ha_token","value":"eyJhbGciOiJIUzI1NiIs..."}'
+
+# Read a secret
+curl http://127.0.0.1:8711/memory/secrets/ha_token
+# → {"key":"ha_token","value":"eyJhbGciOiJIUzI1NiIs..."}
+
+# List all keys (values hidden)
+curl http://127.0.0.1:8711/memory/secrets
+# → {"keys":["ha_token"],"agent":"andrei"}
+
+# Delete a secret
+curl -X DELETE http://127.0.0.1:8711/memory/secrets/ha_token
+```
+
+**Security properties:**
+
+- Secrets never written to disk in plaintext — always age-encrypted
+- Decrypted content lives in memory only
+- File permissions depend on container UID (1000:1000 by default)
+- Atomic write: entire file rewritten on each `set()`/`delete()`
+- Lost `AGE_KEY` = lost secrets (no recovery)
 
 ### 2.5 Recency Boost (Timestamps)
 
