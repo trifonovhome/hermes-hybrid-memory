@@ -34,20 +34,15 @@ Hermes Gateway. Один Docker-образ, `AGENT_ID` задаёт иденти
 | Таблицы | `facts` (id, content, source, created_at, updated_at) + `facts_fts` (virtual) |
 | Сессии | `sessions` + `sessions_fts` (id, title, preview, content, message_count) |
 
-### 2.2 Chroma — Semantic Understanding
+### 2.2 Chroma — Семантический поиск
 
 | Параметр | Значение |
 |----------|----------|
-| Хранилище | ChromaDB Persistent `/data/memory/chroma/` |
-| **Эмбеддинг (удалённый)** | bge-m3 (1024-мерный), через `LITELLM_URL/v1/embeddings` |
-| **Эмбеддинг (локальный)** 🆕 | embeddinggemma-300M-Q8_0 (768-мерный), через llama-cpp-python |
-| **Выбор режима** | `LOCAL_EMBED_MODEL` задан → локальный GGUF, иначе LiteLLM |
+| Хранилище | ChromaDB Persistent `/data/chroma/` |
+| Эмбеддинг | embeddinggemma-300M-Q8_0 (768d), через llama-cpp-python |
 | Метрика | Cosine distance → similarity score |
 | Коллекции | `memory_{AGENT_ID}` + `sessions_{AGENT_ID}` |
-| Латентность (удалённый) | 50–200 ms |
-| Латентность (локальный) | 100–500 ms (CPU, 300M-параметров) |
-| Латентность (удалённый) | 50–200 ms (включая embedding round-trip) |
-| Латентность (локальный) | 100–500 ms (CPU-инференс 300M-параметров) |
+| Латентность | 100–500 ms (CPU, 300M параметров) |
 | Ресенси-буст | × (0.7 + 0.3 × recency_boost(created_at)) |
 
 ### 2.3 MemoryGraph — Graph Relationships
@@ -145,24 +140,10 @@ final_score = base_score × (0.7 + 0.3 × recency_boost(created_at))
 ### 3.3 LLM-цепочка
 
 ```
-TUI (хост) ──→ Hermes Gateway :8642 (Docker) ──→ Headroom :8787 ──→ LiteLLM :4000 ──→ DeepSeek API
-                                                                         ↘ Ollama (опционально)
+TUI (хост) ──→ Hermes Gateway :8642 (Docker) ──→ DeepSeek API
 ```
 
-**Memory API использует `LITELLM_URL` для:**
-- Эмбеддингов (bge-m3): `{LITELLM_URL}/v1/embeddings`
-- Экстракции фактов (deepseek-v4-pro): `{LITELLM_URL}/v1/chat/completions`
-
-**Текущий LITELLM_URL:** `http://127.0.0.1:8787` (через Headroom).
-
-### 3.4 Custom-провайдеры TUI (host)
-
-| Провайдер | base_url | Использование |
-|-----------|----------|---------------|
-| `custom:Headroom (:8787)` | `http://127.0.0.1:8787/v1` | ⭐ Основной |
-| `custom:hermes-docker` | `http://127.0.0.1:8642/v1` | Docker gateway напрямую |
-| `custom:llm.trifonov.su` | `http://llm.trifonov.su:4000/v1` | LiteLLM напрямую |
-| `custom:deepseek-direct` | `https://api.deepseek.com` | Прямой API |
+Memory API использует DeepSeek API для экстракции фактов. Эмбеддинги — локальные (llama-cpp).
 
 ---
 
@@ -291,7 +272,7 @@ TUI (хост) ──→ Hermes Gateway :8642 (Docker) ──→ Headroom :8787 
 
 ### 8.5 Local embeddings
 - **Первая загрузка:** entrypoint авто-загружает GGUF с HuggingFace (~300 MB)
-- **Размерность:** embeddinggemma-300M даёт 768d (bge-m3 = 1024d) — коллекции несовместимы
+- **Размерность:** embeddinggemma-300M даёт 768d
 - **CPU:** Celeron N4000 (2 ядра) — ~200–500ms на эмбеддинг, достаточно для домашнего агента
 - **Память:** модель 300 MB + llama.cpp runtime ~50 MB — помещается в 512 MB RAM
 
@@ -345,5 +326,5 @@ curl -s -X POST http://127.0.0.1:8711/memory/search \
 # LLM-экстракция
 curl -s -X POST http://127.0.0.1:8711/memory/extract \
  -H 'Content-Type: application/json' \
- -d '{"text":"Сегодня настроили Headroom proxy на порту 8787"}' | python3 -m json.tool
+ -d '{"text":"Настроил новый бэкенд памяти для агента"}' | python3 -m json.tool
 ```

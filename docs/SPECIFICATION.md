@@ -140,7 +140,7 @@ a week ago correctly gets 0.88 boost, not 1.0.
 TUI (host) ──→ Hermes Gateway :8642 (Docker) ──→ DeepSeek API
 ```
 
-Memory API uses `LITELLM_URL` for fact extraction LLM calls.
+Memory API uses DeepSeek API for fact extraction. Embeddings are local (llama-cpp).
 
 ---
 
@@ -254,7 +254,7 @@ MemoryGraph adds +0.30 to the fusion score (additive, not replacement).
 
 ### 7.5 Local embeddings
 - **First load:** entrypoint auto-downloads GGUF from HuggingFace (~300 MB)
-- **Dimensions:** embeddinggemma-300M → 768d (bge-m3 = 1024d) — collections are incompatible
+- **Dimensions:** embeddinggemma-300M → 768d
 - **Performance:** ~200–500ms per embedding on CPU, sufficient for home agent
 
 ### 7.6 SecureStore
@@ -305,5 +305,5 @@ curl -s -X POST http://127.0.0.1:8711/memory/search \
 # LLM extraction
 curl -s -X POST http://127.0.0.1:8711/memory/extract \
  -H 'Content-Type: application/json' \
- -d '{"text":"Configured Headroom proxy on port 8787"}' | python3 -m json.tool
+ -d '{"text":"Set up new memory backend for agent"}' | python3 -m json.tool
 ```

@@ -4,22 +4,22 @@
 
 > Version: 2026-06-19
 
-## What Changed
+## Current Architecture
 
-| Component | Before | After |
-|-----------|--------|-------|
-| **MemoryGraph** | Docker container only | + host plugin (direct SQLite) |
-| **Embeddings** | bge-m3 (1024d) via LiteLLM | embeddinggemma-300M (768d) local via llama-cpp |
-| **Chroma collection** | `hermes_memory_bge_m3` | `memory_{AGENT_ID}` (shared with Docker) |
-| **Recency boost** | Docker only | All 3 backends (FTS5, Chroma, MemoryGraph) |
-| **Fusion weights** | 0.75×Chroma + 0.25×FTS5 | 0.45×Chroma + 0.25×FTS5 + 0.30×MemoryGraph |
+| Component | Details |
+|-----------|---------|
+| **MemoryGraph** | Direct SQLite in host plugin + Docker container |
+| **Embeddings** | embeddinggemma-300M (768d) local via llama-cpp |
+| **Chroma collection** | `memory_{AGENT_ID}` (shared between host plugin and Docker) |
+| **Recency boost** | Active in all 3 backends (FTS5, Chroma, MemoryGraph) |
+| **Fusion weights** | 0.45×Chroma + 0.25×FTS5 + 0.30×MemoryGraph |
 
 ## 1. Host Provider (hybrid_memory_provider.py)
 
 File: `~/scripts/hybrid_memory_provider.py`
 
 Ensure it has:
-- `LocalEmbedder` (llama-cpp, GGUF, 768d) instead of `LiteLLMEmbedder`
+- `LocalEmbedder` (llama-cpp, GGUF, 768d)
 - `MemoryGraphBackend` (direct SQLite)
 - `recency_boost()` function
 - `COLLECTION_NAME = "memory_{AGENT_ID}"` — matches Docker container

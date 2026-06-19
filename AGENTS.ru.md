@@ -4,22 +4,22 @@
 
 > Версия: 2026-06-19
 
-## Что изменилось
+## Текущая архитектура
 
-| Компонент | Было | Стало |
-|-----------|------|-------|
-| **MemoryGraph** | Только в Docker-контейнере | + в хост-плагине (прямой SQLite) |
-| **Эмбеддинги** | bge-m3 (1024d) через LiteLLM | embeddinggemma-300M (768d) локально через llama-cpp |
-| **Chroma коллекция** | `hermes_memory_bge_m3` | `memory_{AGENT_ID}` (авто, общая с Docker) |
-| **Recency boost** | Только Docker | Все 3 бэкенда (FTS5, Chroma, MemoryGraph) |
-| **Fusion веса** | 0.75×Chroma + 0.25×FTS5 | 0.45×Chroma + 0.25×FTS5 + 0.30×MemoryGraph |
+| Компонент | Детали |
+|-----------|--------|
+| **MemoryGraph** | Прямой SQLite в хост-плагине + Docker-контейнере |
+| **Эмбеддинги** | embeddinggemma-300M (768d) локально через llama-cpp |
+| **Chroma коллекция** | `memory_{AGENT_ID}` (общая между хост-плагином и Docker) |
+| **Recency boost** | Активен во всех 3 бэкендах (FTS5, Chroma, MemoryGraph) |
+| **Fusion веса** | 0.45×Chroma + 0.25×FTS5 + 0.30×MemoryGraph |
 
 ## 1. Хост-провайдер (hybrid_memory_provider.py)
 
 Файл: `~/scripts/hybrid_memory_provider.py`
 
 Убедись что в нём есть:
-- `LocalEmbedder` (llama-cpp, GGUF, 768d) вместо `LiteLLMEmbedder`
+- `LocalEmbedder` (llama-cpp, GGUF, 768d)
 - `MemoryGraphBackend` (прямой SQLite)
 - `recency_boost()` функция
 - `COLLECTION_NAME = "memory_{AGENT_ID}"` — совпадает с Docker-контейнером
