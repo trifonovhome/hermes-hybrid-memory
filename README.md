@@ -179,6 +179,7 @@ Sorted by fusion score descending, trimmed to limit.
 - [SKILL.md](SKILL.md) — Hermes Agent skill definition
 - [AGENTS.md](AGENTS.md) — Upgrade instructions for AI agents
 - [AGENTS.ru.md](AGENTS.ru.md) — Russian version
+- [CHANGELOG.md](CHANGELOG.md) — Release history
 
 ## Hermes Plugin
 

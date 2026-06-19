@@ -179,6 +179,7 @@ curl -X POST http://127.0.0.1:8711/memory/search \
 - [SKILL.md](SKILL.md) — Определение навыка Hermes Agent
 - [AGENTS.ru.md](AGENTS.ru.md) — Инструкция по обновлению для AI-агентов
 - [AGENTS.md](AGENTS.md) — English version
+- [CHANGELOG.md](CHANGELOG.md) — История релизов
 
 ## Плагин Hermes
 
