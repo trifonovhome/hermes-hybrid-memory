@@ -1,6 +1,6 @@
 ---
 name: hermes-hybrid-memory
-description: Per-agent hybrid memory stack (FTS5 + Chroma embeddinggemma-300M + MemoryGraph) for Hermes Agent.
+description: Per-agent hybrid memory stack (FTS5 + Chroma embeddinggemma-300M + MemoryGraph + SecureStore) for Hermes Agent.
 version: 1.2.0
 ---
 
@@ -38,11 +38,15 @@ docker compose -f docker/docker-compose.yml up -d
 | Method | Path | Description |
 |--------|------|-------------|
 | GET | `/health` | `{"status":"ok","agent":"..."}` |
-| GET | `/status` | `{"fts5":N,"chroma":N,"memorygraph":N}` |
+| GET | `/status` | `{"fts5":N,"chroma":N,"memorygraph":N,"secrets":N}` |
 | POST | `/memory/search` | Unified 3-backend search |
 | POST | `/memory/extract` | LLM fact extraction → all backends |
 | POST | `/memory/sessions/search` | FTS5 + Chroma session search |
 | POST | `/memory/sessions/import` | Import session |
+| GET | `/memory/secrets` | List SecureStore keys |
+| GET | `/memory/secrets/{key}` | Read a secret |
+| POST | `/memory/secrets` | Store `{"key":"...","value":"..."}` |
+| DELETE | `/memory/secrets/{key}` | Delete a secret |
 
 ## Environment Variables
 
@@ -53,6 +57,8 @@ docker compose -f docker/docker-compose.yml up -d
 | `MEMORY_PORT` | 8711 | Memory API port |
 | `LISTEN_PORT` | 8711 | Actual bind port |
 | `LOCAL_EMBED_MODEL` | `/data/models/embeddinggemma-300M-Q8_0.gguf` | Local GGUF embedding model |
+| `AGE_KEY` | — | Age secret key for SecureStore (required) |
+| `SECRETS_FILE` | /data/secrets/secrets.enc | Encrypted secrets file |
 | `FTS5_DB` | /data/fts5/memory.db | FTS5 database path |
 | `CHROMA_DIR` | /data/chroma | ChromaDB directory |
 | `MEMORYGRAPH_DIR` | /data/memorygraph | MemoryGraph directory |
@@ -66,6 +72,51 @@ docker compose -f docker/docker-compose.yml up -d
 | MemoryGraph | 0.30 + tag_bonus | Graph relationships |
 
 All backends use recency boost: `score × (0.7 + 0.3 × recency_boost(created_at))`.
+
+## SecureStore — Encrypted Secrets
+
+Age-encrypted key-value store inside the container (`/data/secrets/secrets.enc`).
+Requires `AGE_KEY` env var to be active.
+
+### Using from agent code
+
+```python
+# Store a secret (e.g., HA token)
+curl -X POST http://127.0.0.1:{MEMORY_PORT}/memory/secrets \
+  -H 'Content-Type: application/json' \
+  -d '{"key":"ha_token","value":"eyJ..."}'
+
+# Read a secret
+curl http://127.0.0.1:{MEMORY_PORT}/memory/secrets/ha_token
+# → {"key":"ha_token","value":"eyJ..."}
+
+# List all keys
+curl http://127.0.0.1:{MEMORY_PORT}/memory/secrets
+# → {"keys":["ha_token","api_key"],"agent":"..."}
+
+# Delete a secret
+curl -X DELETE http://127.0.0.1:{MEMORY_PORT}/memory/secrets/ha_token
+```
+
+### Setup
+
+```bash
+# Generate key (once)
+age-keygen -o key.txt
+# Extract: grep "AGE-SECRET-KEY-" key.txt
+
+# Pass to container
+# docker-compose.yml:
+#   environment:
+#     - AGE_KEY=AGE-SECRET-KEY-1QV7LZ2...3XYZ
+```
+
+### Security
+
+- Secrets never written to disk in plaintext
+- Decrypted content lives in memory only
+- Atomic writes — entire file rewritten on each change
+- Lost AGE_KEY = lost secrets (no recovery)
 
 ## Docs
 
