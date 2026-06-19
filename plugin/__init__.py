@@ -37,8 +37,9 @@ SEARCH_SCHEMA = {
     "name": "hybrid_search",
     "description": (
         "Hybrid memory search — combines FTS5 keyword precision with "
-        "Chroma semantic understanding via bge-m3 (1024d). "
-        "Returns ranked results from both backends with fusion scores. "
+        "Chroma semantic understanding via bge-m3 (1024d) and MemoryGraph "
+        "graph relationships. "
+        "Returns ranked results from all three backends with fusion scores. "
         "Use this as the primary memory recall tool. "
         "Good for: infrastructure facts, configuration details, architecture decisions."
     ),
@@ -169,11 +170,20 @@ class HybridMemoryProvider(MemoryProvider):
 
     def system_prompt_block(self) -> str:
         """Static description injected into the system prompt."""
+        mg_count = 0
+        try:
+            self._ensure_provider()
+            if self._provider:
+                mg_count = self._provider.memorygraph.count()
+        except Exception:
+            pass
         return (
             "\n## Hybrid Memory (trial)\n"
-            "You have a hybrid memory backend with two search layers:\n"
+            "You have a hybrid memory backend with three search layers:\n"
             "- FTS5 (keyword precision) — 42 deduped facts from hermes-local-memory\n"
-            "- Chroma + LiteLLM bge-m3 (semantic) — 84 facts with cosine ranking\n"
+            "- Chroma + embeddinggemma-300M (semantic, 768d, local GGUF)"
+            " — 51 facts with cosine ranking\n"
+            f"- MemoryGraph (graph relationships) — {mg_count} nodes via SQLite\n"
             "\n"
             "Use `hybrid_search` for infrastructure facts, config details, "
             "and architecture decisions. Use `hybrid_status` to check health.\n"
