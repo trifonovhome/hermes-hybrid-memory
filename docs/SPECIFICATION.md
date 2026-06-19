@@ -15,9 +15,8 @@ Hermes Gateway. Один Docker-образ (`Dockerfile.unified`), `AGENT_ID` з
 
 **Принципы:**
 - **Изоляция:** у каждого агента свои данные (FTS5/Chroma/MemoryGraph)
-- **Shared pool:** агент-agent-gamma (:8710) — общий пул фактов, доступный всем
-- **Share/Broadcast:** прямая peer-to-peer репликация фактов между агентами
 - **Unified:** агент + память в одном контейнере, `network_mode:host`
+- **Shared pool + Share/Broadcast:** в приватном репо `hermes-hybrid-memory-home`
 
 ---
 
@@ -51,14 +50,16 @@ Hermes Gateway. Один Docker-образ (`Dockerfile.unified`), `AGENT_ID` з
 | Латентность (локальный) | 100–500 ms (CPU-инференс 300M-параметров) |
 | Ресенси-буст | × (0.7 + 0.3 × recency_boost(created_at)) |
 
-### 2.3 Shared Pool — Remote Facts
+### 2.3 Shared Pool — Remote Facts 🔒
+
+> ⚠️ **Только в приватном репо** `hermes-hybrid-memory-home`. В публичном репо отсутствует.
 
 | Параметр | Значение |
 |----------|----------|
 | Тип | Удалённый HTTP-эндпоинт |
-| Эндпоинт | `SHARED_URL/memory/search` (agent-agent-gamma :8710) |
+| Эндпоинт | `SHARED_URL/memory/search` |
 | Маршрутизация | Все агенты читают; shared сам себя не опрашивает |
-| Вес | 0.45 × score (в fusion) |
+| Вес | 0.20 × score (в fusion) |
 
 ### 2.4 MemoryGraph — Graph Relationships
 
@@ -70,7 +71,7 @@ Hermes Gateway. Один Docker-образ (`Dockerfile.unified`), `AGENT_ID` з
 | Типы памяти | GENERAL, TASK, WORKFLOW, COMMAND, PROBLEM, PROJECT |
 | Поиск | FTS over nodes + per-word fallback с дедупликацией |
 | Ресенси-буст | × (0.7 + 0.3 × recency_boost(created_at)) |
-| Вес в fusion | 0.15 + tag_bonus (до 0.05) |
+| Вес в fusion | 0.30 + tag_bonus (до 0.05) |
 
 ### 2.5 SecureStore — Encrypted Secrets
 
@@ -108,10 +109,8 @@ final_score = similarity_score × (0.7 + 0.3 × recency_boost)
 |--------|-----------|----------|---------|--------|--------|
 | agent-agent-alpha | agent-agent-alpha | agent-alpha | :8642 | :8711 | :8710 |
 | agent-agent-beta | agent-agent-beta | agent-beta | :8643 | :8712 | :8710 |
-| agent-agent-gamma | agent-agent-gamma | agent-gamma | :8647 ✅ | :8710 ✅ (master) | :8710 |
-| ~~memory-shared~~ | УДАЛЁН | — | — | — | — |
 
-**Shared pool** — agent-agent-gamma на :8710, без отдельного контейнера (устранён конфликт портов и data-директорий).
+**Shared pool и agent-gamma** — в приватном репо `hermes-hybrid-memory-home`.
 
 **Все:** `network_mode:host`, `user:1000:1000`, `restart:unless-stopped`.
 
@@ -121,8 +120,8 @@ final_score = similarity_score × (0.7 + 0.3 × recency_boost)
 |-----------|------|--------|-------------|---------|
 | agent-agent-alpha | `data/agent-alpha/fts5` | `data/agent-alpha/chroma` | `data/agent-alpha/memorygraph` | `./profiles/alpha` |
 | agent-agent-beta | `data/agent-beta/fts5` | `data/agent-beta/chroma` | `data/agent-beta/memorygraph` | `./profiles/beta` |
-| agent-agent-gamma | `data/shared/fts5` | `data/shared/chroma` | `data/shared/memorygraph` | — |
-| memory-shared | `data/shared/fts5` | `data/shared/chroma` | `data/shared/memorygraph` | — |
+
+> 🔒 agent-gamma и shared pool — в приватном репо
 
 ### 3.3 LLM-цепочка
 
@@ -156,17 +155,16 @@ TUI (хост) ──→ Hermes Gateway :8642 (Docker) ──→ Headroom :8787 
 |-------|------|----------|
 | GET | `/health` | `{"status":"ok","agent":"...","port":...}` |
 | GET | `/status` | `{"agent":"...","fts5":N,"chroma":N,"memorygraph":N}` |
-| POST | `/memory/search` | Унифицированный поиск (4 бэкенда) |
+| POST | `/memory/search` | Унифицированный поиск (3 бэкенда) |
 | POST | `/memory/extract` | LLM-экстракция фактов → хранение во всех бэкендах |
-| POST | `/memory/share` | Отправить факт другому агенту |
-| POST | `/memory/receive` | Принять факт от другого агента |
-| POST | `/memory/broadcast` | Отправить факт всем пирам |
 | POST | `/memory/sessions/search` | Поиск по истории чатов (FTS5 + Chroma) |
-| POST | `/memory/sessions/import` | Импорт сессии (из Honcho) |
+| POST | `/memory/sessions/import` | Импорт сессии |
 | GET | `/memory/secrets` | Список ключей SecureStore |
 | GET | `/memory/secrets/{key}` | Значение секрета |
 | POST | `/memory/secrets` | Сохранить `{"key":"...","value":"..."}` |
 | DELETE | `/memory/secrets/{key}` | Удалить секрет |
+
+> 🔒 `/memory/share`, `/memory/receive`, `/memory/broadcast` — в приватном репо
 
 ---
 
@@ -174,22 +172,21 @@ TUI (хост) ──→ Hermes Gateway :8642 (Docker) ──→ Headroom :8787 
 
 ### 5.1 Этапы
 
-1. Запрос ко всем 4 бэкендам параллельно (limit × 2 каждый)
+1. Запрос ко всем 3 бэкендам параллельно (limit × 2 каждый)
 2. Дедупликация по нормализованному ключу (alnum, lowercase, 80 символов)
 3. Применение fusion-весов
 4. Сортировка по fusion score (desc)
 5. Обрезка до `limit` результатов
 
-### 5.2 Веса (текущие, 4-backend)
+### 5.2 Веса (текущие, 3-backend)
 
 | Бэкенд | Вес | Тип |
 |--------|-----|-----|
-| Shared pool | 0.45 × score | Новый факт |
-| Chroma | 0.50 × score | Новый факт |
-| FTS5 | 0.20 × min(1.0, bm25_norm + 0.2) | Новый ИЛИ буст существующего |
-| MemoryGraph | 0.15 + tag_bonus | Новый ИЛИ буст существующего |
+| Chroma | 0.45 × score | Новый факт |
+| FTS5 | 0.25 × min(1.0, bm25_norm + 0.2) | Новый ИЛИ буст существующего |
+| MemoryGraph | 0.30 + tag_bonus | Новый ИЛИ буст существующего |
 
-**Бустинг:** если факт уже найден Chroma/Shared, FTS5 добавляет +0.20, MemoryGraph добавляет +0.15 к fusion-счёту (не заменяет).
+**Бустинг:** если факт уже найден Chroma, FTS5 добавляет +0.25, MemoryGraph добавляет +0.30 к fusion-счёту (не заменяет).
 
 ### 5.3 Ответ
 
@@ -209,7 +206,6 @@ TUI (хост) ──→ Hermes Gateway :8642 (Docker) ──→ Headroom :8787 
  "backends": {
    "fts5": 6,
    "chroma": 3,
-   "shared": 1,
    "memorygraph": 4
  }
 }
@@ -226,13 +222,7 @@ TUI (хост) ──→ Hermes Gateway :8642 (Docker) ──→ Headroom :8787 
 | `AGENT_PORT` | 8642 | Порт Hermes Gateway |
 | `LISTEN_HOST` | 127.0.0.1 | Адрес для Memory API |
 | `LISTEN_PORT` | 8711 | Альтернативное имя для MEMORY_PORT |
-| `LITELLM_URL` | http://127.0.0.1:4000 | URL LiteLLM (эмбеддинги + extraction) |
-| `LITELLM_API_KEY` | — | LiteLLM API key |
-| `SHARED_URL` | http://127.0.0.1:8710 | Shared pool (agent-agent-gamma) |
-| `PEERS` | — | `name:host:port,name:host:port` |
-| `EXTRACTION_MODEL` | deepseek-v4-pro | LLM для экстракции фактов |
-| `EMBED_MODEL` | bge-m3 | Модель эмбеддингов (LiteLLM) |
-| `LOCAL_EMBED_MODEL` | — | Путь к GGUF-файлу для локальных эмбеддингов |
+| `LOCAL_EMBED_MODEL` | `/data/models/embeddinggemma-300M-Q8_0.gguf` | Путь к GGUF-файлу для локальных эмбеддингов |
 | `EMBED_MODEL_HF` | embeddinggemma-300M | HF-модель для авто-загрузки в entrypoint |
 | `SECRETS_FILE` | /data/secrets/secrets.enc | Путь к шифрованным секретам |
 | `AGE_KEY` | — | Age secret key для SecureStore |
@@ -242,24 +232,22 @@ TUI (хост) ──→ Hermes Gateway :8642 (Docker) ──→ Headroom :8787 
 | `CHROMA_COLLECTION` | memory_{AGENT_ID} | Имя коллекции Chroma (авто) |
 | `CHROMA_SESSIONS` | sessions_{AGENT_ID} | Имя коллекции сессий (авто) |
 
+> 🔒 `SHARED_URL`, `PEERS`, `LITELLM_URL`, `EMBED_MODEL` — в приватном репо
+
 ---
 
-## 7. Текущее состояние (13.06.2026 02:30)
+## 7. Текущее состояние (19.06.2026)
 
 | Агент | Gateway | Memory | FTS5 | Chroma | MemoryGraph | Статус |
 |-------|---------|--------|------|--------|-------------|--------|
-| agent-agent-alpha | :8642 ✅ | :8711 ✅ | 51 | 84 | 51 | Up |
-| agent-agent-beta | :8643 ✅ | :8712 ✅ | 2 | 2 | 1 | Up |
-| agent-agent-gamma | :8647 ✅ | :8710 ✅ | 1 | 1 | 1 | Up |
+| agent-alpha | :8642 ✅ | :8711 ✅ | 48 | 51 | 259 | Up |
+| agent-beta | :8643 ✅ | :8712 ✅ | — | — | — | Up |
 
-**Все бэкенды работают.** Shared pool = agent-agent-gamma. Share/broadcast agent-alpha→agent-beta работает.
-agent-delta/agent-epsilon/agent-zeta не запущены (Connection refused).
+**Все 3 бэкенда работают** (FTS5 + Chroma + MemoryGraph). Эмбеддинги — локальный embeddinggemma-300M (768d, llama-cpp). Recency boost активен.
 
-**LLM-цепочка:** Headroom (:8787) ✅, LiteLLM (:4000) ✅, DeepSeek API ✅.
+**Shared pool, agent-gamma, share/broadcast** — в приватном репо `hermes-hybrid-memory-home`.
 
-**Hermes plugin:** `memory.provider=hybrid`, инструменты `hybrid_search`/`hybrid_status`
-активны. ⚠️ `hybrid_status` показывает старую standalone Chroma
-(`~/projects/chroma_direct`, 214 фактов) — не ту, что в Docker-контейнерах.
+**Hermes plugin:** `memory.provider=hybrid`, инструменты `hybrid_search`/`hybrid_status` активны.
 
 ---
 
@@ -283,10 +271,9 @@ agent-delta/agent-epsilon/agent-zeta не запущены (Connection refused).
 - **Директория не создаётся:** `_init_fts5()` вызывает `os.makedirs()`, но только
  при импорте — `_ensure_fts5()` перед каждой операцией
 
-### 8.4 Shared pool
-- **agent-agent-gamma + memory-shared конфликт:** оба мапят одни `data/shared/` директории
- → Chroma lock / SQLite lock → один падает
-- **Решение (применено):** удалить `memory-shared`, agent-agent-gamma сам обслуживает :8710
+### 8.4 Shared pool 🔒
+- **agent-gamma + memory-shared конфликт:** оба мапят одни `data/shared/` директории
+- **Решение (приватный репо):** удалить `memory-shared`, agent-gamma сам обслуживает :8710
 - **Код читает `LISTEN_PORT`, не `MEMORY_PORT`** — `MEMORY_PORT` в docker-compose
  игнорируется для фактического bind. Нужно либо `LISTEN_PORT`, либо патч кода.
 
@@ -323,7 +310,7 @@ agent-delta/agent-epsilon/agent-zeta не запущены (Connection refused).
 | Docker Compose | `./docker/docker-compose-unified.yml` |
 | Data (agent-alpha) | `./docker/data/agent-alpha/{fts5,chroma,memorygraph}/` |
 | Data (agent-beta) | `./docker/data/agent-beta/{fts5,chroma,memorygraph}/` |
-| Data (shared) | `./docker/data/shared/{fts5,chroma,memorygraph}/` |
+| Data (shared) 🔒 | `./docker/data/shared/{fts5,chroma,memorygraph}/` (приватный репо) |
 | Профиль Hermes (agent-alpha) | `./profiles/alpha/config.yaml` |
 | GitHub | [github.com/trifonovhome/hermes-hybrid-memory](https://github.com/trifonovhome/hermes-hybrid-memory) |
 

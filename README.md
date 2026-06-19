@@ -7,20 +7,18 @@ MemoryGraph (graph relationships). + SecureStore (encrypted secrets).
 ## Architecture
 
 ```
-agent-alpha (:8642)    agent-beta (:8643)     agent-gamma (:8647, shared master)
-┌──────────────────┐   ┌──────────────────┐   ┌───────────────────────┐
-│ Hermes Gateway   │   │ Hermes Gateway   │   │ Hermes Gateway        │
-│ Memory API :8711 │   │ Memory API :8712 │   │ Memory API :8710 ⭐   │
-│ FTS5 + Chroma    │   │ FTS5 + Chroma    │   │ FTS5 + Chroma         │
-│ + MemoryGraph    │   │ + MemoryGraph    │   │ + MemoryGraph         │
-└──────┬───────────┘   └──────┬───────────┘   └───────────┬───────────┘
-       │ share/broadcast      │                           │
-       └──────────────────────┴───────────────────────────┘
-                    все читают agent-gamma (:8710) как SHARED_URL
+agent-alpha (:8642)    agent-beta (:8643)
+┌──────────────────┐   ┌──────────────────┐
+│ Hermes Gateway   │   │ Hermes Gateway   │
+│ Memory API :8711 │   │ Memory API :8712 │
+│ FTS5 + Chroma    │   │ FTS5 + Chroma    │
+│ + MemoryGraph    │   │ + MemoryGraph    │
+└──────────────────┘   └──────────────────┘
+     изолированные агенты — каждый со своей памятью
 ```
 
-- **agent-gamma** — shared master, SHARED_URL=http://127.0.0.1:8710
-- **agent-alpha / agent-beta** — изолированные агенты с share/broadcast
+- **agent-alpha / agent-beta** — изолированные агенты, каждый со своим FTS5+Chroma+MemoryGraph
+- Перекрёстный обмен памятью (share/broadcast) — **в приватном репо** `hermes-hybrid-memory-home`
 
 ## 3 Backends
 
@@ -87,7 +85,6 @@ docker compose -f docker/docker-compose.yml up -d agent-alpha
 
 ```bash
 # Health checks
-curl http://127.0.0.1:8710/health  # agent-gamma (shared)
 curl http://127.0.0.1:8711/health  # agent-alpha
 curl http://127.0.0.1:8712/health  # agent-beta
 
@@ -98,11 +95,6 @@ curl http://127.0.0.1:8711/status
 curl -X POST http://127.0.0.1:8711/memory/search \
   -H 'Content-Type: application/json' \
   -d '{"query":"setup instructions","limit":3}'
-
-# Share fact between agents
-curl -X POST http://127.0.0.1:8711/memory/share \
-  -H 'Content-Type: application/json' \
-  -d '{"to":"agent-beta","fact":"Important discovery"}'
 ```
 
 ## REST API
@@ -111,13 +103,10 @@ curl -X POST http://127.0.0.1:8711/memory/share \
 |--------|------|-------------|
 | GET | `/health` | `{"status":"ok","agent":"..."}` |
 | GET | `/status` | `{"fts5":N,"chroma":N,"memorygraph":N}` |
-| POST | `/memory/search` | Unified 4-backend search |
+| POST | `/memory/search` | Unified 3-backend search |
 | POST | `/memory/extract` | LLM fact extraction → all backends |
-| POST | `/memory/share` | Send fact to peer agent |
-| POST | `/memory/receive` | Receive fact from peer |
-| POST | `/memory/broadcast` | Send fact to all peers |
 | POST | `/memory/sessions/search` | FTS5 + Chroma session search |
-| POST | `/memory/sessions/import` | Import session (Honcho format) |
+| POST | `/memory/sessions/import` | Import session |
 
 ## Environment Variables
 
@@ -127,15 +116,12 @@ curl -X POST http://127.0.0.1:8711/memory/share \
 | `AGENT_PORT` | 8642 | Hermes gateway port |
 | `MEMORY_PORT` | 8711 | Memory API port |
 | `LISTEN_PORT` | 8711 | Actual bind port (use same as MEMORY_PORT) |
-| `LITELLM_URL` | http://127.0.0.1:4000 | LiteLLM for embeddings + extraction |
-| `LITELLM_API_KEY` | — | LiteLLM master key |
-| `SHARED_URL` | http://127.0.0.1:8710 | Shared pool (agent-gamma) |
-| `PEERS` | — | `name:host:port,...` for share/broadcast |
-| `EXTRACTION_MODEL` | deepseek-v4-pro | LLM for fact extraction |
-| `EMBED_MODEL` | bge-m3 | Embedding model |
-| `FTS5_DB` | /data/memory/fts5/memory.db | FTS5 database path |
-| `CHROMA_DIR` | /data/memory/chroma | ChromaDB persistent directory |
-| `MEMORYGRAPH_DIR` | /data/memory/memorygraph | MemoryGraph database directory |
+| `LOCAL_EMBED_MODEL` | `/data/models/embeddinggemma-300M-Q8_0.gguf` | Local GGUF embedding model |
+| `FTS5_DB` | /data/fts5/memory.db | FTS5 database path |
+| `CHROMA_DIR` | /data/chroma | ChromaDB persistent directory |
+| `MEMORYGRAPH_DIR` | /data/memorygraph | MemoryGraph database directory |
+
+> 💡 **SHARED_URL, PEERS, /memory/share, /memory/broadcast** — в приватном репо `hermes-hybrid-memory-home`
 
 ## Fusion Algorithm
 
