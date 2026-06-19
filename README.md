@@ -17,17 +17,53 @@ agent-alpha (:8642)    agent-beta (:8643)
      изолированные агенты — каждый со своей памятью
 ```
 
-- **agent-alpha / agent-beta** — изолированные агенты, каждый со своим FTS5+Chroma+MemoryGraph
-- Перекрёстный обмен памятью (share/broadcast) — **в приватном репо** `hermes-hybrid-memory-home`
-
 ## 3 Backends
 
 | # | Backend | Storage | Search Type | Fusion Weight |
 |---|---------|---------|-------------|---------------|
 | 1 | **FTS5** | SQLite | BM25 keyword + recency boost | 0.25× |
-| 2 | **Chroma** | ChromaDB | Semantic (embeddinggemma-300M, 768d, local GGUF) | 0.45× |
+| 2 | **Chroma** | ChromaDB | Semantic (local GGUF, 768d) | 0.45× |
 | 3 | **MemoryGraph** | SQLite | Graph relationships + recency boost | 0.30× |
-| 🔐 | **SecureStore** | Age-encrypted | Encrypted key-value (HA tokens, API keys) | — |
+| 🔐 | **SecureStore** | Age-encrypted | Encrypted key-value (tokens, API keys) | — |
+
+Chroma collection name: `memory_{AGENT_ID}` (auto-generated per agent).
+
+## Recency Boost (Timestamps)
+
+Все факты хранятся с меткой времени `created_at` (ISO 8601). При поиске
+применяется буст свежести к базовому скору каждого бэкенда:
+
+```
+final_score = base_score × (0.7 + 0.3 × recency_boost(created_at))
+```
+
+### Формула recency_boost
+
+```
+дней с момента создания    boost    множитель к скору
+──────────────────────    ──────    ─────────────────
+сегодня                    1.00     × (0.7 + 0.30) = ×1.00
+1–7 дней               1.00→0.60   × (0.7 + 0.30)→(0.7 + 0.18)
+8–30 дней              0.60→0.30   × (0.7 + 0.18)→(0.7 + 0.09)
+31–90 дней             0.30→0.05   × (0.7 + 0.09)→(0.7 + 0.015)
+90+ дней                  0.05      × (0.7 + 0.015) = ×0.715
+```
+
+- Свежие факты (сегодня): полный вес
+- Недельной давности: 88–100% веса
+- Месячной давности: 79–88% веса
+- Старые (90+ дней): сохраняют 71.5% веса — никогда не обнуляются
+
+### Где хранятся таймстемпы
+
+| Backend | Поле | Формат |
+|---------|------|--------|
+| FTS5 | `facts.created_at` (колонка SQLite) | ISO 8601 с timezone |
+| Chroma | `metadatas["created_at"]` | ISO 8601 Z-суффикс |
+| MemoryGraph | `nodes.created_at` (колонка SQLite) | `YYYY-MM-DD HH:MM:SS` |
+
+Таймстемпы записываются при создании факта. При переиндексации (FTS5→Chroma)
+таймстемпы переносятся атомарно — старым фактам не назначается текущая дата.
 
 ## Quick Start
 
@@ -48,7 +84,7 @@ cd hermes-hybrid-memory
 ### 2. Create data directories
 
 ```bash
-mkdir -p data/{alpha,beta,gamma}/{fts5,chroma,memorygraph}
+mkdir -p data/{alpha,beta}/{fts5,chroma,memorygraph}
 mkdir -p profiles/{alpha,beta}
 chown -R 1000:1000 data/ profiles/
 ```
@@ -74,7 +110,7 @@ memory:
 # Build all agents
 docker compose -f docker/docker-compose.yml build --no-cache
 
-# Start all three
+# Start all
 docker compose -f docker/docker-compose.yml up -d
 
 # Or start individually
@@ -115,25 +151,30 @@ curl -X POST http://127.0.0.1:8711/memory/search \
 | `AGENT_ID` | agent-alpha | Agent identity |
 | `AGENT_PORT` | 8642 | Hermes gateway port |
 | `MEMORY_PORT` | 8711 | Memory API port |
-| `LISTEN_PORT` | 8711 | Actual bind port (use same as MEMORY_PORT) |
+| `LISTEN_PORT` | 8711 | Actual bind port |
 | `LOCAL_EMBED_MODEL` | `/data/models/embeddinggemma-300M-Q8_0.gguf` | Local GGUF embedding model |
 | `FTS5_DB` | /data/fts5/memory.db | FTS5 database path |
 | `CHROMA_DIR` | /data/chroma | ChromaDB persistent directory |
 | `MEMORYGRAPH_DIR` | /data/memorygraph | MemoryGraph database directory |
 
-> 💡 **SHARED_URL, PEERS, /memory/share, /memory/broadcast** — в приватном репо `hermes-hybrid-memory-home`
-
 ## Fusion Algorithm
 
-3 backends queried in parallel (limit × 2). Results deduplicated by normalized key.
-Weights: chroma 0.45×, fts5 0.25×, memorygraph 0.30×.
-Recency boost applied uniformly: `score × (0.7 + 0.3 × boost)`.
-Boost curve: 1.0 (today) → 0.6 (7d) → 0.3 (30d) → 0.05 (90+d).
+3 backends queried in parallel (limit × 2). Results deduplicated by normalized key
+(alnum, lowercase, 80 chars). Weights applied additively:
+
+| Step | Backend | Action |
+|------|---------|--------|
+| 1 | Chroma | New fact, fusion = 0.45 × cosine_score |
+| 2 | FTS5 | New OR boost: +0.25 × normalized_bm25 |
+| 3 | MemoryGraph | New OR boost: +0.30 + tag_bonus |
+
+Sorted by fusion score descending, trimmed to limit.
 
 ## Docs
 
 - [SPECIFICATION.md](docs/SPECIFICATION.md) — Full technical specification
 - [SKILL.md](SKILL.md) — Hermes Agent skill definition
+- [AGENTS.md](AGENTS.md) — Upgrade instructions for AI agents
 
 ## Hermes Plugin
 

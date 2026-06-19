@@ -169,21 +169,28 @@ class HybridMemoryProvider(MemoryProvider):
     # ── Optional hooks ──────────────────────────────────────────────────
 
     def system_prompt_block(self) -> str:
-        """Static description injected into the system prompt."""
+        """Dynamic description injected into the system prompt."""
         mg_count = 0
+        chroma_count = 0
+        fts5_ok = False
         try:
             self._ensure_provider()
             if self._provider:
                 mg_count = self._provider.memorygraph.count()
+                chroma_count = self._provider.chroma.count()
+                fts5_ok = self._provider.fts5.db_path.exists()
         except Exception:
             pass
+        fts5_str = f"FTS5 (keyword precision) — {'active' if fts5_ok else 'inactive'}"
+        chroma_str = (f"Chroma + embeddinggemma-300M (semantic, 768d, local GGUF)"
+                      f" — {chroma_count} facts with cosine ranking")
+        mg_str = f"MemoryGraph (graph relationships) — {mg_count} nodes via SQLite"
         return (
             "\n## Hybrid Memory (trial)\n"
             "You have a hybrid memory backend with three search layers:\n"
-            "- FTS5 (keyword precision) — 42 deduped facts from hermes-local-memory\n"
-            "- Chroma + embeddinggemma-300M (semantic, 768d, local GGUF)"
-            " — 51 facts with cosine ranking\n"
-            f"- MemoryGraph (graph relationships) — {mg_count} nodes via SQLite\n"
+            f"- {fts5_str}\n"
+            f"- {chroma_str}\n"
+            f"- {mg_str}\n"
             "\n"
             "Use `hybrid_search` for infrastructure facts, config details, "
             "and architecture decisions. Use `hybrid_status` to check health.\n"

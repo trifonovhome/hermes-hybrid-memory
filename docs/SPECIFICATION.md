@@ -8,15 +8,13 @@
 
 ## 1. Обзор
 
-Гибридная память Hermes — это **per-agent** система с 5 бэкендами, работающая внутри
+Гибридная память Hermes — это **per-agent** система с 3 бэкендами, работающая внутри
 унифицированных Docker-контейнеров. Каждый контейнер содержит и Memory API, и
-Hermes Gateway. Один Docker-образ (`Dockerfile.unified`), `AGENT_ID` задаёт
-идентичность.
+Hermes Gateway. Один Docker-образ, `AGENT_ID` задаёт идентичность.
 
 **Принципы:**
 - **Изоляция:** у каждого агента свои данные (FTS5/Chroma/MemoryGraph)
 - **Unified:** агент + память в одном контейнере, `network_mode:host`
-- **Shared pool + Share/Broadcast:** в приватном репо `hermes-hybrid-memory-home`
 
 ---
 
@@ -50,18 +48,7 @@ Hermes Gateway. Один Docker-образ (`Dockerfile.unified`), `AGENT_ID` з
 | Латентность (локальный) | 100–500 ms (CPU-инференс 300M-параметров) |
 | Ресенси-буст | × (0.7 + 0.3 × recency_boost(created_at)) |
 
-### 2.3 Shared Pool — Remote Facts 🔒
-
-> ⚠️ **Только в приватном репо** `hermes-hybrid-memory-home`. В публичном репо отсутствует.
-
-| Параметр | Значение |
-|----------|----------|
-| Тип | Удалённый HTTP-эндпоинт |
-| Эндпоинт | `SHARED_URL/memory/search` |
-| Маршрутизация | Все агенты читают; shared сам себя не опрашивает |
-| Вес | 0.20 × score (в fusion) |
-
-### 2.4 MemoryGraph — Graph Relationships
+### 2.3 MemoryGraph — Graph Relationships
 
 | Параметр | Значение |
 |----------|----------|
@@ -73,7 +60,7 @@ Hermes Gateway. Один Docker-образ (`Dockerfile.unified`), `AGENT_ID` з
 | Ресенси-буст | × (0.7 + 0.3 × recency_boost(created_at)) |
 | Вес в fusion | 0.30 + tag_bonus (до 0.05) |
 
-### 2.5 SecureStore — Encrypted Secrets
+### 2.4 SecureStore — Encrypted Secrets
 
 | Параметр | Значение |
 |----------|----------|
@@ -86,18 +73,52 @@ Hermes Gateway. Один Docker-образ (`Dockerfile.unified`), `AGENT_ID` з
 
 **Без `AGE_KEY` — SecureStore не активен** (503 на запросах).
 
-### 2.6 Ресенси-буст (единая формула)
+### 2.5 Recency Boost (Timestamps)
+
+Все факты во всех бэкендах хранятся с меткой времени создания. При поиске
+применяется буст свежести — недавние факты получают приоритет над старыми.
+
+**Формула:**
 
 ```
-recency_boost(days):
- today      → 1.0
- 1–7 days   → 0.6 + 0.4 × (7 − days) / 7
- 8–30 days  → 0.3 + 0.3 × (30 − days) / 23
- 31–90 days → 0.05 + 0.25 × (90 − days) / 60
- 90+ days   → 0.05
+recency_boost(created_at):
+  today      → 1.00
+  1-7 days   → 0.60 + 0.40 × (7 − days) / 7
+  8-30 days  → 0.30 + 0.30 × (30 − days) / 23
+  31-90 days → 0.05 + 0.25 × (90 − days) / 60
+  90+ days   → 0.05
 
-final_score = similarity_score × (0.7 + 0.3 × recency_boost)
+final_score = base_score × (0.7 + 0.3 × recency_boost(created_at))
 ```
+
+Множитель к скору по дням:
+
+| Возраст | boost | multiplier | Эффект |
+|---------|-------|-----------|--------|
+| Сегодня | 1.00 | ×1.00 | Полный вес |
+| 3 дня | 0.83 | ×0.95 | −5% |
+| 7 дней | 0.60 | ×0.88 | −12% |
+| 14 дней | 0.47 | ×0.84 | −16% |
+| 30 дней | 0.30 | ×0.79 | −21% |
+| 60 дней | 0.16 | ×0.75 | −25% |
+| 90+ дней | 0.05 | ×0.715 | −28.5% |
+
+**Где хранятся таймстемпы:**
+
+| Backend | Поле | Формат | Запись |
+|---------|------|--------|--------|
+| FTS5 | `facts.created_at` (TEXT) | `2026-06-14T18:32:08.199747+00:00` | При `fts5_store()` |
+| Chroma | `metadatas["created_at"]` | `2026-06-14T18:27:05.737907Z` | При `chroma_store()` |
+| MemoryGraph | `nodes.created_at` (TIMESTAMP) | `2026-06-12 20:25:42` | При `memorygraph_store()` |
+
+**Recency boost при переиндексации:** при переносе фактов из FTS5 в Chroma
+таймстемпы переносятся атомарно — старым фактам не назначается текущая дата.
+Благодаря этому факты, созданные неделю назад, корректно получают буст 0.88,
+а не 1.0.
+
+**Почему 0.7 в формуле:** коэффициент 0.7 гарантирует что даже очень старые
+факты (>90 дней) сохраняют 71.5% своего базового веса. Память никогда не
+«забывает» полностью — только затухает.
 
 ---
 
@@ -105,12 +126,10 @@ final_score = similarity_score × (0.7 + 0.3 × recency_boost)
 
 ### 3.1 Docker Compose (`./docker/docker-compose-unified.yml`)
 
-| Сервис | Контейнер | AGENT_ID | Gateway | Memory | Shared |
-|--------|-----------|----------|---------|--------|--------|
-| agent-agent-alpha | agent-agent-alpha | agent-alpha | :8642 | :8711 | :8710 |
-| agent-agent-beta | agent-agent-beta | agent-beta | :8643 | :8712 | :8710 |
-
-**Shared pool и agent-gamma** — в приватном репо `hermes-hybrid-memory-home`.
+| Сервис | Контейнер | AGENT_ID | Gateway | Memory |
+|--------|-----------|----------|---------|--------|
+| agent-agent-alpha | agent-agent-alpha | agent-alpha | :8642 | :8711 |
+| agent-agent-beta | agent-agent-beta | agent-beta | :8643 | :8712 |
 
 **Все:** `network_mode:host`, `user:1000:1000`, `restart:unless-stopped`.
 
@@ -120,8 +139,6 @@ final_score = similarity_score × (0.7 + 0.3 × recency_boost)
 |-----------|------|--------|-------------|---------|
 | agent-agent-alpha | `data/agent-alpha/fts5` | `data/agent-alpha/chroma` | `data/agent-alpha/memorygraph` | `./profiles/alpha` |
 | agent-agent-beta | `data/agent-beta/fts5` | `data/agent-beta/chroma` | `data/agent-beta/memorygraph` | `./profiles/beta` |
-
-> 🔒 agent-gamma и shared pool — в приватном репо
 
 ### 3.3 LLM-цепочка
 
@@ -163,8 +180,6 @@ TUI (хост) ──→ Hermes Gateway :8642 (Docker) ──→ Headroom :8787 
 | GET | `/memory/secrets/{key}` | Значение секрета |
 | POST | `/memory/secrets` | Сохранить `{"key":"...","value":"..."}` |
 | DELETE | `/memory/secrets/{key}` | Удалить секрет |
-
-> 🔒 `/memory/share`, `/memory/receive`, `/memory/broadcast` — в приватном репо
 
 ---
 
@@ -232,8 +247,6 @@ TUI (хост) ──→ Hermes Gateway :8642 (Docker) ──→ Headroom :8787 
 | `CHROMA_COLLECTION` | memory_{AGENT_ID} | Имя коллекции Chroma (авто) |
 | `CHROMA_SESSIONS` | sessions_{AGENT_ID} | Имя коллекции сессий (авто) |
 
-> 🔒 `SHARED_URL`, `PEERS`, `LITELLM_URL`, `EMBED_MODEL` — в приватном репо
-
 ---
 
 ## 7. Текущее состояние (19.06.2026)
@@ -244,8 +257,6 @@ TUI (хост) ──→ Hermes Gateway :8642 (Docker) ──→ Headroom :8787 
 | agent-beta | :8643 ✅ | :8712 ✅ | — | — | — | Up |
 
 **Все 3 бэкенда работают** (FTS5 + Chroma + MemoryGraph). Эмбеддинги — локальный embeddinggemma-300M (768d, llama-cpp). Recency boost активен.
-
-**Shared pool, agent-gamma, share/broadcast** — в приватном репо `hermes-hybrid-memory-home`.
 
 **Hermes plugin:** `memory.provider=hybrid`, инструменты `hybrid_search`/`hybrid_status` активны.
 
@@ -271,30 +282,24 @@ TUI (хост) ──→ Hermes Gateway :8642 (Docker) ──→ Headroom :8787 
 - **Директория не создаётся:** `_init_fts5()` вызывает `os.makedirs()`, но только
  при импорте — `_ensure_fts5()` перед каждой операцией
 
-### 8.4 Shared pool 🔒
-- **agent-gamma + memory-shared конфликт:** оба мапят одни `data/shared/` директории
-- **Решение (приватный репо):** удалить `memory-shared`, agent-gamma сам обслуживает :8710
-- **Код читает `LISTEN_PORT`, не `MEMORY_PORT`** — `MEMORY_PORT` в docker-compose
- игнорируется для фактического bind. Нужно либо `LISTEN_PORT`, либо патч кода.
-
-### 8.5 MemoryGraph integer overflow
+### 8.4 MemoryGraph integer overflow
 - **Симптом:** `SearchQuery limit=8589934592` → Pydantic validation error
 - **Причина:** неограниченный `limit * 2` при передаче между unified_search → memorygraph_search
 - **Фикс:** `limit = min(max(1, limit), 100)` в `memorygraph_search` и `unified_search`
 
-### 8.6 Local embeddings
+### 8.5 Local embeddings
 - **Первая загрузка:** entrypoint авто-загружает GGUF с HuggingFace (~300 MB)
 - **Размерность:** embeddinggemma-300M даёт 768d (bge-m3 = 1024d) — коллекции несовместимы
 - **CPU:** Celeron N4000 (2 ядра) — ~200–500ms на эмбеддинг, достаточно для домашнего агента
 - **Память:** модель 300 MB + llama.cpp runtime ~50 MB — помещается в 512 MB RAM
 
-### 8.7 SecureStore
+### 8.6 SecureStore
 - **Без `AGE_KEY`** — все запросы к `/memory/secrets` возвращают 503
 - **age** должен быть установлен в контейнере (`apt-get install age`)
 - **Запись атомарна:** `set()` перезаписывает весь файл заново
 - **Декрипт при старте** — если файл существует и `AGE_KEY` задан
 
-### 8.8 hybrid_search из хоста
+### 8.7 hybrid_search из хоста
 - **Stale Chroma:** `hybrid_status` может показывать `~/projects/chroma_direct`
  вместо контейнерной Chroma — проверять `chroma_dir` в ответе
 
@@ -310,7 +315,6 @@ TUI (хост) ──→ Hermes Gateway :8642 (Docker) ──→ Headroom :8787 
 | Docker Compose | `./docker/docker-compose-unified.yml` |
 | Data (agent-alpha) | `./docker/data/agent-alpha/{fts5,chroma,memorygraph}/` |
 | Data (agent-beta) | `./docker/data/agent-beta/{fts5,chroma,memorygraph}/` |
-| Data (shared) 🔒 | `./docker/data/shared/{fts5,chroma,memorygraph}/` (приватный репо) |
 | Профиль Hermes (agent-alpha) | `./profiles/alpha/config.yaml` |
 | GitHub | [github.com/trifonovhome/hermes-hybrid-memory](https://github.com/trifonovhome/hermes-hybrid-memory) |
 
@@ -326,7 +330,7 @@ docker ps --filter "name=agent-" --format "table {{.Names}}\t{{.Status}}"
 ss -tlnp | grep -E '864[237]|871[012]'
 
 # Статус памяти каждого агента
-for port in 8710 8711 8712; do
+for port in 8711 8712; do
  echo "=== :$port ==="
  curl -s http://127.0.0.1:$port/status | python3 -m json.tool
 done
