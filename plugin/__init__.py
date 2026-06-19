@@ -12,6 +12,7 @@ Activate with: hermes config set memory.provider hybrid
 Tools exposed:
   - hybrid_search(query, n)    — fused multi-backend search
   - hybrid_status              — provider health check
+  - hybrid_secure_get(key)     — retrieve secret from SecureStore
 """
 
 from __future__ import annotations
@@ -72,7 +73,26 @@ STATUS_SCHEMA = {
     },
 }
 
-ALL_TOOL_SCHEMAS = [SEARCH_SCHEMA, STATUS_SCHEMA]
+SECURE_GET_SCHEMA = {
+    "name": "hybrid_secure_get",
+    "description": (
+        "Retrieve a secret from the agent's encrypted SecureStore. "
+        "Use this to fetch stored tokens (HA, API keys) at runtime. "
+        "Requires AGE_KEY to be configured in the container."
+    ),
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "key": {
+                "type": "string",
+                "description": "Secret key to retrieve (e.g., 'ha_token', 'api_key').",
+            },
+        },
+        "required": ["key"],
+    },
+}
+
+ALL_TOOL_SCHEMAS = [SEARCH_SCHEMA, STATUS_SCHEMA, SECURE_GET_SCHEMA]
 
 
 # ── MemoryProvider Implementation ─────────────────────────────────────────
@@ -163,6 +183,8 @@ class HybridMemoryProvider(MemoryProvider):
             return self._handle_search(args)
         elif tool_name == "hybrid_status":
             return self._handle_status()
+        elif tool_name == "hybrid_secure_get":
+            return self._handle_secure_get(args)
         else:
             return json.dumps({"error": f"Unknown tool: {tool_name}"})
 
@@ -194,6 +216,8 @@ class HybridMemoryProvider(MemoryProvider):
             "\n"
             "Use `hybrid_search` for infrastructure facts, config details, "
             "and architecture decisions. Use `hybrid_status` to check health.\n"
+            "Use `hybrid_secure_get(key)` to retrieve secrets from the agent's "
+            "encrypted SecureStore (HA tokens, API keys).\n"
         )
 
     def prefetch(self, query: str, *, session_id: str = "") -> str:
@@ -272,6 +296,28 @@ class HybridMemoryProvider(MemoryProvider):
         except Exception as e:
             logger.warning("Hybrid: failed to load provider: %s", e)
             self._provider = None
+
+    def _handle_status(self) -> str:
+        self._ensure_provider()
+        if self._provider is None:
+            return json.dumps({"error": "Hybrid provider not available"})
+
+        s = self._provider.status()
+        return json.dumps(s, ensure_ascii=False, default=str)
+
+    def _handle_secure_get(self, args: Dict[str, Any]) -> str:
+        key = args.get("key", "")
+        if not key:
+            return json.dumps({"error": "key required"})
+        try:
+            import urllib.request
+            req = urllib.request.Request(
+                f"http://127.0.0.1:8711/memory/secrets/{key}"
+            )
+            resp = json.loads(urllib.request.urlopen(req, timeout=5).read())
+            return json.dumps({"key": key, "value": resp.get("value", "")})
+        except Exception as e:
+            return json.dumps({"error": f"SecureStore unavailable: {e}", "key": key})
 
     def _handle_search(self, args: Dict[str, Any]) -> str:
         self._ensure_provider()
