@@ -46,9 +46,10 @@ File: `plugin/__init__.py` in the repository
 
 ### What should be present:
 
-1. `system_prompt_block()` mentions 3 backends
+1. `system_prompt_block()` mentions 3 backends + SecureStore
 2. `SEARCH_SCHEMA` describes 3 backends
-3. `HybridMemoryProvider.__init__()` uses `LocalEmbedder` + `MemoryGraphBackend`
+3. `SECURE_GET_SCHEMA` provides `hybrid_secure_get(key)` tool
+4. `HybridMemoryProvider.__init__()` uses `LocalEmbedder` + `MemoryGraphBackend`
 
 ### Installation:
 
@@ -121,6 +122,13 @@ python3 ~/scripts/hybrid_memory_provider.py search "docker"
 
 # 4. In Hermes — call hybrid_search
 # (results should include backend=memorygraph and backend=chroma_768d)
+
+# 5. Test SecureStore
+curl -X POST http://127.0.0.1:8711/memory/secrets \
+  -H 'Content-Type: application/json' \
+  -d '{"key":"test","value":"hello"}'
+curl http://127.0.0.1:8711/memory/secrets/test
+# In Hermes: hybrid_secure_get("test") → {"key":"test","value":"hello"}
 ```
 
 ## 6. Affected Files
