@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.2.1 - 2026-06-20
+
+_Fixes for Hermes v0.17.0 compatibility and FTS5 write mirroring._
+
+### Fixed
+
+- Fix `_detect_memory_mode()` path: `hermes-trial` → `hermes-hybrid-memory` ([#](https://github.com/trifonovhome/hermes-hybrid-memory/commit/))
+- Fix SQL INSERT in `on_memory_write()`: add `peer_id` and `updated_at` columns (NOT NULL constraints)
+
+### Added
+
+- Mirror built-in memory writes to FTS5 (keyword search) via `on_memory_write()` hook — previously only Chroma received mirrored writes
+- Automatic FTS5 fact creation with UUID-based IDs, agent-scoped peer_id, and timestamps
+
 ## 1.2.0 - 2026-06-19
 
 _Third public release. Documentation overhaul and architecture cleanup._

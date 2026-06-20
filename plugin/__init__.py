@@ -162,10 +162,10 @@ class HybridMemoryProvider(MemoryProvider):
                 base_url = str(cfg.get("model", {}).get("base_url", ""))
                 if ":8642" in base_url:
                     os.environ["HYBRID_FTS5_DB"] = (
-                        "/home/andreitrifonov/infra/docker/hermes-trial"
+                        "/home/andreitrifonov/infra/docker/hermes-hybrid-memory"
                         "/data/andrei/fts5/memory.db")
                     os.environ["HYBRID_CHROMA_DIR"] = (
-                        "/home/andreitrifonov/infra/docker/hermes-trial"
+                        "/home/andreitrifonov/infra/docker/hermes-hybrid-memory"
                         "/data/andrei/chroma")
                     logger.info("Hybrid: Docker Gateway mode — switched to Docker data dirs")
                 else:
@@ -252,7 +252,7 @@ class HybridMemoryProvider(MemoryProvider):
         content: str,
         metadata: Optional[Dict[str, Any]] = None,
     ) -> None:
-        """Mirror memory writes to Chroma for future semantic search."""
+        """Mirror memory writes to FTS5 + Chroma for future search."""
         if action not in ("add", "replace"):
             return
         self._ensure_provider()
@@ -261,10 +261,35 @@ class HybridMemoryProvider(MemoryProvider):
 
         try:
             source = (metadata or {}).get("write_origin", "memory-write")
+
+            # 1. Chroma (semantic)
             self._provider.chroma.add(
                 documents=[content],
                 metadatas=[{"source": source, "target": target}],
             )
+
+            # 2. FTS5 (keyword) — direct SQL INSERT
+            import os, sqlite3, datetime, uuid
+            fts5_db = self._provider.fts5.db_path
+            if fts5_db.exists():
+                conn = sqlite3.connect(str(fts5_db))
+                now = datetime.datetime.utcnow().isoformat()
+                fact_id = str(uuid.uuid4())[:8]
+                agent = os.environ.get("AGENT_ID", "andrei")
+                conn.execute(
+                    "INSERT INTO facts (id, content, source, agent_id, peer_id, "
+                    "created_at, updated_at) "
+                    "VALUES (?, ?, ?, ?, ?, ?, ?)",
+                    (fact_id, content, source, agent, agent, now, now),
+                )
+                conn.execute(
+                    "INSERT INTO facts_fts(fact_id, content) VALUES (?, ?)",
+                    (fact_id, content),
+                )
+                conn.commit()
+                conn.close()
+                logger.debug("Hybrid: mirrored to FTS5 (id=%s)", fact_id)
+
             logger.debug("Hybrid: mirrored memory write (%s/%s)", target, action)
         except Exception as e:
             logger.debug("Hybrid: mirror write failed: %s", e)
