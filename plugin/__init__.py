@@ -204,7 +204,8 @@ class HybridMemoryProvider(MemoryProvider):
         except Exception:
             pass
         fts5_str = f"FTS5 (keyword precision) — {'active' if fts5_ok else 'inactive'}"
-        chroma_str = (f"Chroma + embeddinggemma-300M (semantic, 768d, local GGUF)"
+        chroma_str = (f"Chroma + embeddinggemma-300M (semantic, 768d, "
+                      f"{self._provider.embedder.label if self._provider else 'local GGUF'})"
                       f" — {chroma_count} facts with cosine ranking")
         mg_str = f"MemoryGraph (graph relationships) — {mg_count} nodes via SQLite"
         return (
