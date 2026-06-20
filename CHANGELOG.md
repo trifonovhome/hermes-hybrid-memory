@@ -1,5 +1,29 @@
 # Changelog
 
+## v1.2.0 — Docker Plugin Fix + Path Auto-Detection (2026-06-20)
+
+### Fixed
+- **Docker plugin discovery** — добавлен `plugin.yaml` в контейнер, плагин наследует `MemoryProvider`
+- **queue_prefetch** — Docker HTTP-плагин теперь реально вызывает Memory API и кеширует контекст
+- **hybrid_secure_get** — добавлен в Docker HTTP-плагин (ранее был только в host-плагине)
+- **Жёсткие пути `/home/andreitrifonov/`** — заменены на авто-детект в `hybrid_memory_provider.py` и host-плагине
+- **HERMES_HOME** — документировано требование `HERMES_HOME=/home/hermes/.hermes/profile` для Docker-контейнеров
+- **entrypoint curl timeout** — добавлен `--connect-timeout 3 --max-time 10` чтобы не виснуть при недоступном home-агенте
+
+### Docker Deployment Requirements
+Для работы hybrid memory в Docker-контейнере нужны **три обязательных условия**:
+1. `plugin.yaml` — смонтирован в `/usr/local/lib/python3.12/site-packages/plugins/memory/hybrid/plugin.yaml`
+2. `class HybridMemoryProvider(MemoryProvider)` — наследование от `MemoryProvider`
+3. `HERMES_HOME=/home/hermes/.hermes/profile` — иначе `load_config()` не видит `provider: hybrid`
+
+### Files
+- `plugin/hybrid/__init__.py` — Docker HTTP plugin: MemoryProvider inheritance, queue_prefetch, hybrid_secure_get
+- `plugin/hybrid/plugin.yaml` — plugin discovery manifest
+- `scripts/hybrid_memory_provider.py` — host provider: path auto-detection
+- `docker-compose.yml` — mounts for plugin.yaml, HERMES_HOME env var
+
+---
+
 ## v1.1.0 — Embedding Provider Switch (2026-06-20)
 
 ### Added
