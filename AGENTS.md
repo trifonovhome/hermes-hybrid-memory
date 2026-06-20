@@ -9,10 +9,37 @@
 | Component | Details |
 |-----------|---------|
 | **MemoryGraph** | Direct SQLite in host plugin + Docker container |
-| **Embeddings** | embeddinggemma-300M (768d) local via llama-cpp |
-| **Chroma collection** | `memory_{AGENT_ID}` (shared between host plugin and Docker) |
+| **Embeddings** | Local (llama-cpp GGUF) **or** Remote (OpenAI API) — switch via `EMBED_PROVIDER` |
+| **Chroma collection** | `memory_{AGENT_ID}` (768d local) or `memory_{AGENT_ID}_{N}d` (remote, dim-suffixed) |
 | **Recency boost** | Active in all 3 backends (FTS5, Chroma, MemoryGraph) |
 | **Fusion weights** | 0.45×Chroma + 0.25×FTS5 + 0.30×MemoryGraph |
+
+### Embedding Provider Switch
+
+Set `EMBED_PROVIDER` env var:
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `EMBED_PROVIDER` | `local` | `local` = llama-cpp GGUF, `external` = OpenAI-compatible API |
+| `EMBED_API_URL` | `http://127.0.0.1:4000/v1` | API base URL (external mode) |
+| `EMBED_API_KEY` | `""` | Bearer token (external mode) |
+| `EMBED_API_MODEL` | `BAAI/bge-m3` | Model name (external mode) |
+
+```bash
+# Local (default)
+python3 hybrid_memory_provider.py status
+# → embed_backend: local (llama-cpp GGUF)
+
+# External (via LiteLLM)
+EMBED_PROVIDER=external \
+EMBED_API_URL=http://127.0.0.1:4000/v1 \
+EMBED_API_KEY=sk-... \
+EMBED_API_MODEL=BAAI/bge-m3 \
+python3 hybrid_memory_provider.py status
+# → embed_backend: external (http://127.0.0.1:4000/v1, model=BAAI/bge-m3)
+```
+
+When embedder dimension differs from stored 768d, a new collection is auto-created with `_{N}d` suffix (e.g. `memory_andrei_1024d`).
 
 ## 1. Host Provider (hybrid_memory_provider.py)
 
