@@ -1,5 +1,21 @@
 # Changelog
 
+## v1.2.1 — Public/Home repo split (2026-06-22)
+
+### Changed
+- **Выделен публичный репо** — убраны home-agent фичи: `llm_proxy.py`, `/admin/key/*`, `entrypoint-home.sh`, `AGENT_ROLE`
+- **hermes-hybrid-memory** теперь office-ready: LiteLLM или прямой API, без кастомного прокси
+- **hermes-hybrid-memory-home** (приватный) — забрал home-agent key distribution и свой LLM-прокси
+
+### Removed
+- `agent/llm_proxy.py` — кастомный LLM-прокси (→ home repo)
+- `docker/entrypoint-home.sh` — home-agent entrypoint (→ home repo)
+- `docker/llm_proxy.py` — дубликат
+- `/admin/key/request`, `/admin/key/spend` — key distribution (→ home repo)
+- `AGENT_ROLE`, `AGENT_AUTH_KEY`, `HOME_AGENT_SECRET` — home-specific env vars
+
+---
+
 ## v1.2.0 — Docker Plugin Fix + Path Auto-Detection (2026-06-20)
 
 ### Fixed

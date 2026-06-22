@@ -3,8 +3,10 @@
 [🇷🇺 Русская версия](README.ru.md)
 
 Per-agent hybrid memory stack for [Hermes Agent](https://github.com/nousresearch/hermes-agent).
-**3 backends in one Docker container + host plugin**: FTS5 (keyword), Chroma (semantic, local GGUF),
+**3 backends in one Docker container + host plugin**: FTS5 (keyword), Chroma (semantic, local GGUF or remote LiteLLM),
 MemoryGraph (graph relationships). + SecureStore (encrypted secrets).
+
+> 🏢 **Office-ready**: uses LiteLLM or direct API for LLM access. For home-agent custom proxy variant, see [hermes-hybrid-memory-home](https://github.com/trifonovhome/hermes-hybrid-memory-home) (private repo).
 
 ## Architecture
 
