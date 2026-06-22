@@ -1,5 +1,40 @@
 # Changelog
 
+## v1.3.0 — Cross-Interface Memory Bridge v2 (2026-06-23)
+
+Cross-Interface Bridge allows seamless context persistence when switching between
+Open WebUI, Dashboard, TUI, and Matrix — the agent remembers what you were working on.
+
+### Added
+- **Cross-Interface Bridge v2** — session context persists across interfaces
+- **`turn_snapshot`** — saves query context to Chroma `bridge_context` every turn
+- **`session_context`** — LLM-extracts key context at session end, stored in Chroma
+- **`_load_bridge_context`** — loads previous session context on prefetch
+- **`SESSION_CONTEXT_PROMPT`** — LLM prompt template for context extraction
+- **`bridge_contexts` counter** in `hybrid_status` output
+- **Bridge status line** in `system_prompt_block`
+
+### Changed
+- **`queue_prefetch`** — now stores turn_snapshot in addition to search cache
+- **`prefetch`** — now returns bridge context alongside search cache
+- **`on_session_end`** — now calls LLM to extract and store session context
+- **Plugin docstring** — updated with bridge description
+
+### Companion Tools
+- **`work_tracker.py`** — MemoryGraph goal/task/result tracker
+  - Typed nodes: goal, task, result with done/pending status
+  - Relationships: OCCURS_IN, LEADS_TO, FOLLOWS, BLOCKED_BY
+  - Commands: summary, goal, task, result, done, retype
+  - Current state: 6 goals (all done), 20 tasks done, 7 results
+
+### LLM Routing Pattern (2026-06-23)
+- **Provider:** `custom` with `base_url: http://127.0.0.1:4000/v1` (Headroom)
+- **Chain:** Hermes → Headroom :4000 (compression) → LiteLLM :8787 (spend/retry) → DeepSeek
+- **Key management:** LiteLLM master key in config `api_key`, DeepSeek key in LiteLLM `.env`
+- **v0.17.0 note:** model catalog disabled — only `deepseek`/`custom` providers, no `custom_providers`
+
+---
+
 ## v1.2.1 — Public/Home repo split (2026-06-22)
 
 ### Changed
